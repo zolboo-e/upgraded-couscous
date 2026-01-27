@@ -1,0 +1,71 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": {
+          "tool": "Bash",
+          "command": "npm |yarn "
+        },
+        "command": "echo '\\n[Hook] This project uses pnpm. Please use pnpm instead of npm/yarn.\\n'",
+        "description": "Remind to use pnpm instead of npm/yarn"
+      },
+      {
+        "matcher": {
+          "tool": "Bash",
+          "command": "git push"
+        },
+        "command": "echo '\\n[Hook] Remember to review changes before pushing. Run pnpm lint && pnpm build first.\\n'",
+        "description": "Remind to lint and build before push"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": {
+          "tool": "Edit",
+          "filePattern": "\\.(ts|tsx|js|jsx|json)$"
+        },
+        "command": "cd /Users/personal/Workspace/GitHub/upgraded-couscous && pnpm biome format --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true",
+        "description": "Auto-format with Biome after editing TypeScript/JavaScript files",
+        "async": true,
+        "timeout": 10000
+      },
+      {
+        "matcher": {
+          "tool": "Write",
+          "filePattern": "\\.(ts|tsx|js|jsx|json)$"
+        },
+        "command": "cd /Users/personal/Workspace/GitHub/upgraded-couscous && pnpm biome format --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true",
+        "description": "Auto-format with Biome after writing TypeScript/JavaScript files",
+        "async": true,
+        "timeout": 10000
+      },
+      {
+        "matcher": {
+          "tool": "Edit",
+          "filePattern": "\\.(ts|tsx)$"
+        },
+        "command": "cd /Users/personal/Workspace/GitHub/upgraded-couscous && pnpm tsc --noEmit --skipLibCheck 2>&1 | head -20 || true",
+        "description": "TypeScript type check after editing .ts/.tsx files",
+        "async": true,
+        "timeout": 30000
+      },
+      {
+        "matcher": {
+          "tool": "Bash",
+          "command": "gh pr create"
+        },
+        "command": "echo '\\n[Hook] PR created! Review it at the URL above.\\n'",
+        "description": "Log PR URL after creation"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": {},
+        "command": "cd /Users/personal/Workspace/GitHub/upgraded-couscous && git diff --name-only 2>/dev/null | xargs -I {} grep -l 'console.log' {} 2>/dev/null && echo '\\n[Hook] Warning: console.log found in modified files. Consider removing before commit.\\n' || true",
+        "description": "Check for console.log in modified files",
+        "async": true,
+        "timeout": 5000
+      }
+    ]
+  }
+}
