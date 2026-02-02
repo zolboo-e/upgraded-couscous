@@ -26,10 +26,10 @@ export type SandboxOutMessage =
   | { type: "ask_user_question"; requestId: string; questions: QuestionItem[] };
 
 // API → Sandbox messages (outgoing from API to sandbox)
-// Note: sessionId is passed via URL query parameter, not in the message
 export type SandboxInMessage =
   | {
       type: "start";
+      sessionId?: string; // DB session UUID - used as Claude session ID for resumption
       systemPrompt?: string;
       resume?: boolean; // true = resume existing Claude session, false/undefined = new session
     }

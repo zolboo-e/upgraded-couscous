@@ -105,6 +105,7 @@ export function createWebSocketHandler(chatService: ChatService) {
         // Resume if session already has messages (Claude session was previously active)
         state.sandboxClient.send({
           type: "start",
+          sessionId: session.id,
           systemPrompt: session.systemPrompt ?? undefined,
           resume: history.length > 0,
         });

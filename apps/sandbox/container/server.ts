@@ -13,6 +13,19 @@ import { type RawData, WebSocket, WebSocketServer } from "ws";
 
 const execAsync = promisify(exec);
 
+async function checkSessionExists(sessionId: string): Promise<boolean> {
+  try {
+    // Check if session file exists in Claude's session storage
+    // Claude Agent SDK stores sessions by ID in ~/.claude/
+    const result = await execAsync(
+      `find /root/.claude -name "*${sessionId}*" -type f 2>/dev/null | head -1`,
+    );
+    return result.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Simple logger with timestamps
 function log(level: "info" | "error" | "debug", message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
@@ -234,6 +247,10 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
 
   log("info", "API key present, starting query");
 
+  // Check if session data exists on disk before attempting to resume
+  const sessionExists = message.sessionId ? await checkSessionExists(message.sessionId) : false;
+  log("info", "Session check", { sessionId: message.sessionId, exists: sessionExists });
+
   // Create message queue for streaming input
   const { iterator, push, close } = createMessageQueue();
 
@@ -253,8 +270,9 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
     options: {
       model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
       systemPrompt: message.systemPrompt,
-      extraArgs: message.sessionId ? { "session-id": message.sessionId } : undefined,
-      resume: message.resume && message.sessionId ? message.sessionId : undefined,
+      extraArgs:
+        !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
+      resume: sessionExists ? message.sessionId : undefined,
     },
   });
 
