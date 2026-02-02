@@ -45,3 +45,21 @@ pnpm db:push      # Push schema to database
 ## Environment
 
 Copy `.env.example` to `.env` and set `DATABASE_URL`.
+
+## Sandbox Environment
+
+Set via `wrangler secret put` for Cloudflare Worker:
+
+- `ANTHROPIC_API_KEY` - Claude API key
+- `API_TOKEN` - Bearer token for sandbox authentication
+- `CF_ACCOUNT_ID` - Cloudflare account ID (set in wrangler.jsonc vars, then override with secret)
+- `AWS_ACCESS_KEY_ID` - R2 access key
+- `AWS_SECRET_ACCESS_KEY` - R2 secret key
+
+### Session Resumption
+
+Sessions persist across container restarts via R2:
+
+1. **First connection**: Creates session with database UUID as Claude session ID
+2. **After response**: Syncs `~/.claude` to R2 bucket (`/persistent/${sessionId}/.claude`)
+3. **Reconnection**: Restores from R2, uses `resume` option to continue session

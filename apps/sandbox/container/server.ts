@@ -3,15 +3,15 @@
  * Uses Node.js with @hono/node-server and ws package.
  */
 
-// import { exec } from "node:child_process";
+import { exec } from "node:child_process";
 import type { Server } from "node:http";
-// import { promisify } from "node:util";
+import { promisify } from "node:util";
 import { query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
-// const execAsync = promisify(exec);
+const execAsync = promisify(exec);
 
 // Simple logger with timestamps
 function log(level: "info" | "error" | "debug", message: string, data?: unknown): void {
@@ -29,6 +29,7 @@ interface IncomingMessage {
   content?: string;
   systemPrompt?: string;
   sessionId?: string; // DB session UUID - used as Claude session ID
+  resume?: boolean; // true = resume existing session, false/undefined = new session
 }
 
 interface OutgoingMessage {
@@ -45,6 +46,7 @@ interface SessionState {
   messageQueue: AsyncIterableIterator<SDKUserMessage> | null;
   pushMessage: ((msg: SDKUserMessage) => void) | null;
   closeQueue: (() => void) | null;
+  sessionId: string | null; // DB session UUID for R2 sync path
 }
 
 // Track active sessions
@@ -109,25 +111,28 @@ function createUserMessage(content: string): SDKUserMessage {
   };
 }
 
-async function syncSessionToPersistent(): Promise<void> {
-  // Disabled: R2 bucket mount not configured on Cloudflare
-  log("debug", "Session sync disabled (R2 not mounted)");
-  //   try {
-  //     log("info", "Syncing session to persistent storage");
+async function syncSessionToPersistent(sessionId: string | null): Promise<void> {
+  if (!sessionId) {
+    log("debug", "Session sync skipped (no sessionId)");
+    return;
+  }
 
-  //     // Ensure target directory exists
-  //     await execAsync("mkdir -p /persistent/.claude");
+  try {
+    log("info", "Syncing session to persistent storage", { sessionId });
 
-  //     // Sync ~/.claude to /persistent/.claude using rsync
-  //     await execAsync("rsync -a /root/.claude/ /persistent/.claude/");
+    // Ensure target directory exists (using sessionId as prefix for isolation)
+    await execAsync(`mkdir -p /persistent/${sessionId}/.claude`);
 
-  //     // Force flush to ensure writes are persisted
-  //     await execAsync("sync");
+    // Sync ~/.claude to /persistent/${sessionId}/.claude using rsync
+    await execAsync(`rsync -a /root/.claude/ /persistent/${sessionId}/.claude/`);
 
-  //     log("info", "Session synced to persistent storage");
-  //   } catch (error) {
-  //     log("error", "Failed to sync session", error instanceof Error ? error.message : error);
-  //   }
+    // Force flush to ensure writes are persisted
+    await execAsync("sync");
+
+    log("info", "Session synced to persistent storage", { sessionId });
+  } catch (error) {
+    log("error", "Failed to sync session", error instanceof Error ? error.message : error);
+  }
 }
 
 function sendMessage(ws: WebSocket, msg: OutgoingMessage): boolean {
@@ -148,6 +153,7 @@ function sendMessage(ws: WebSocket, msg: OutgoingMessage): boolean {
 async function processClaudeMessages(
   ws: WebSocket,
   claudeQuery: AsyncIterable<SDKMessage>,
+  sessionId: string | null,
 ): Promise<void> {
   let streamStarted = false;
 
@@ -186,7 +192,7 @@ async function processClaudeMessages(
         }
 
         // Sync session files to persistent storage
-        await syncSessionToPersistent();
+        await syncSessionToPersistent(sessionId);
 
         sendMessage(ws, {
           type: "done",
@@ -213,6 +219,7 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
     hasContent: !!message.content,
     hasSystemPrompt: !!message.systemPrompt,
     sessionId: message.sessionId,
+    resume: !!message.resume,
   });
 
   // Verify API key is set (set via setEnvVars() by the Worker)
@@ -235,20 +242,24 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
     messageQueue: iterator,
     pushMessage: push,
     closeQueue: close,
+    sessionId: message.sessionId ?? null,
   });
 
   // Start Claude query with session-id for persistence
+  // - extraArgs: { "session-id": ... } sets the session ID for new sessions
+  // - resume: sessionId restores existing session state from disk
   const claudeQuery = query({
     prompt: iterator,
     options: {
       model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
       systemPrompt: message.systemPrompt,
       extraArgs: message.sessionId ? { "session-id": message.sessionId } : undefined,
+      resume: message.resume && message.sessionId ? message.sessionId : undefined,
     },
   });
 
   // Process messages in background with error handling
-  processClaudeMessages(ws, claudeQuery).catch((error) => {
+  processClaudeMessages(ws, claudeQuery, message.sessionId ?? null).catch((error) => {
     log("error", "Claude processing error", error instanceof Error ? error.stack : error);
     sendMessage(ws, { type: "error", message: "Claude processing failed" });
   });
@@ -371,16 +382,17 @@ async function gracefulShutdown(signal: string): Promise<void> {
     await Promise.all(closePromises);
     log("info", `Closed ${closePromises.length} WebSocket connections`);
 
-    // 2. Clean up all sessions
+    // 2. Clean up all sessions and sync to persistent storage
     for (const [, session] of sessions.entries()) {
       if (session.closeQueue) {
         session.closeQueue();
       }
+      // Sync each session to R2
+      if (session.sessionId) {
+        await syncSessionToPersistent(session.sessionId);
+      }
     }
     sessions.clear();
-
-    // 3. Final sync to persistent storage
-    await syncSessionToPersistent();
 
     // 4. Close WebSocket server
     wss.close(() => {

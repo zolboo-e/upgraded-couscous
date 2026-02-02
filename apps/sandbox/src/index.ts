@@ -60,30 +60,44 @@ app.get("/ws", async (c) => {
   console.log("[/ws] Environment variables set");
 
   // Mount R2 bucket for session persistence
-  //   const mountCheck = await sandbox.exec(
-  //     "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
-  //   );
-  //   if (mountCheck.stdout.includes("NOT_MOUNTED")) {
-  //     await sandbox.mountBucket("claude-sessions", "/persistent", {
-  //       endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  //       s3fsOptions: ["nonempty"],
-  //     });
-  //     console.log("[/ws] R2 bucket mounted at /persistent");
-  //   } else {
-  //     console.log("[/ws] /persistent already mounted");
-  //   }
+  const mountCheck = await sandbox.exec(
+    "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
+  );
+  if (mountCheck.stdout.includes("NOT_MOUNTED")) {
+    await sandbox.mountBucket("claude-sessions", "/persistent", {
+      endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      s3fsOptions: ["nonempty"],
+    });
+    console.log("[/ws] R2 bucket mounted at /persistent");
+  } else {
+    console.log("[/ws] /persistent already mounted");
+  }
 
   // Ensure required directories exist for Claude Agent SDK
-  //   await sandbox.exec("mkdir -p /etc/claude-code/.claude/skills /root/.claude/skills");
+  // await sandbox.exec("mkdir -p /etc/claude-code/.claude/skills /root/.claude/skills");
 
-  //   // Restore session from persistent storage if exists
-  //   await sandbox.exec(`
-  //     if [ -d "/persistent/.claude" ]; then
-  //       mkdir -p /root/.claude
-  //       rsync -a /persistent/.claude/ /root/.claude/ 2>/dev/null || true
-  //     fi
-  //   `);
-  //   console.log("[/ws] Session restored (if existed)");
+  // Restore session from persistent storage if not already present locally
+  const restoreResult = await sandbox.exec(`
+    if [ ! -d "/root/.claude" ] || [ -z "$(ls -A /root/.claude 2>/dev/null)" ]; then
+      if [ -d "/persistent/${sessionId}/.claude" ]; then
+        mkdir -p /root/.claude
+        rsync -a /persistent/${sessionId}/.claude/ /root/.claude/ 2>/dev/null || true
+        echo "RESTORED"
+      else
+        echo "NO_R2_DATA"
+      fi
+    else
+      echo "ALREADY_PRESENT"
+    fi
+  `);
+  const restoreStatus = restoreResult.stdout.trim();
+  if (restoreStatus === "RESTORED") {
+    console.log("[/ws] Session restored from R2 for:", sessionId);
+  } else if (restoreStatus === "ALREADY_PRESENT") {
+    console.log("[/ws] Session already in container, skipping R2 restore:", sessionId);
+  } else {
+    console.log("[/ws] No R2 data to restore for:", sessionId);
+  }
 
   // Start server.ts using startProcess (inherits env vars from setEnvVars)
   const process = await sandbox.startProcess("bun /workspace/server.ts");

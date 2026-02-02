@@ -40,7 +40,7 @@ export function createWebSocketHandler(chatService: ChatService) {
     onOpen: async (
       ws: WSContext,
       session: Session,
-      _history: Message[],
+      history: Message[],
       userId: string,
     ): Promise<WebSocketState> => {
       const state: WebSocketState = {
@@ -102,9 +102,11 @@ export function createWebSocketHandler(chatService: ChatService) {
         });
 
         // Send start message to sandbox (API key set via setEnvVars in sandbox worker)
+        // Resume if session already has messages (Claude session was previously active)
         state.sandboxClient.send({
           type: "start",
           systemPrompt: session.systemPrompt ?? undefined,
+          resume: history.length > 0,
         });
       } catch (error) {
         const errorMessage =

@@ -31,6 +31,7 @@ export type SandboxInMessage =
   | {
       type: "start";
       systemPrompt?: string;
+      resume?: boolean; // true = resume existing Claude session, false/undefined = new session
     }
   | { type: "message"; content: string }
   | {
