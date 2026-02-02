@@ -18,15 +18,6 @@ export class UnauthorizedAccessError extends AppError {
   }
 }
 
-export class ClaudeApiError extends AppError {
-  readonly statusCode = 502;
-  readonly code = "CLAUDE_API_ERROR";
-
-  constructor(message: string) {
-    super(`Claude API error: ${message}`);
-  }
-}
-
 export class ValidationError extends AppError {
   readonly statusCode = 400;
   readonly code = "VALIDATION_ERROR";

@@ -18,7 +18,7 @@ export function NewChatButton({
     setIsCreating(true);
     try {
       const session = await createChatSession();
-      router.push(`/chat/${session.id}`);
+      router.push(`/chats/${session.id}`);
     } catch (error) {
       setIsCreating(false);
       throw error;

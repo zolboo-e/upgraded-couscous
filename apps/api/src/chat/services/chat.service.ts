@@ -84,10 +84,6 @@ export class ChatService {
     return this.repository.getMessagesBySessionId(sessionId);
   }
 
-  async updateClaudeSessionId(sessionId: string, claudeSessionId: string): Promise<void> {
-    await this.repository.updateClaudeSessionId(sessionId, claudeSessionId);
-  }
-
   async savePermissionExchange(
     sessionId: string,
     request: PermissionRequestContent,

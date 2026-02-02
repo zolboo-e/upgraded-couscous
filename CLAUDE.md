@@ -28,6 +28,7 @@ pnpm db:push      # Push schema to database
 
 - `apps/web` - Next.js frontend (uses @repo/ui, @repo/db)
 - `apps/api` - Hono.js API server (uses @repo/db)
+- `apps/sandbox` - Cloudflare Workers container running Claude Agent SDK WebSocket server
 - `packages/ui` - Shared React components
 - `packages/db` - Drizzle ORM schema and client
 - `packages/tailwind-config` - Shared Tailwind config

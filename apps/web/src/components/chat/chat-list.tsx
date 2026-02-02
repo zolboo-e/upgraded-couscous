@@ -53,7 +53,7 @@ export function ChatList(): React.ReactElement {
     setIsCreating(true);
     try {
       const session = await createChatSession();
-      router.push(`/chat/${session.id}`);
+      router.push(`/chats/${session.id}`);
     } finally {
       setIsCreating(false);
     }

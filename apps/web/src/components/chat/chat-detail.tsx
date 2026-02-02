@@ -18,6 +18,11 @@ import {
 import { ChatInput } from "./chat-input";
 import { ChatMessage, StreamingMessage } from "./chat-message";
 import {
+  type ApiSandboxStatus,
+  ConnectionStatusBar,
+  type WebApiStatus,
+} from "./connection-status-bar";
+import {
   ToolPermissionDialog,
   type ToolPermissionRequest,
   type ToolPermissionResponse,
@@ -31,7 +36,8 @@ interface StreamChunk {
     | "done"
     | "error"
     | "tool_permission_request"
-    | "ask_user_question";
+    | "ask_user_question"
+    | "connection_status";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -46,6 +52,8 @@ interface StreamChunk {
   toolInput?: Record<string, unknown>;
   // Ask user question fields
   questions?: QuestionItem[];
+  // Connection status fields
+  sandboxStatus?: "connected" | "disconnected" | "not_configured";
 }
 
 interface ChatDetailProps {
@@ -64,6 +72,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<ToolPermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<AskUserQuestionRequest | null>(null);
+  const [webApiStatus, setWebApiStatus] = useState<WebApiStatus>("disconnected");
+  const [apiSandboxStatus, setApiSandboxStatus] = useState<ApiSandboxStatus>("unknown");
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -107,6 +117,11 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
     const ws = new WebSocket(`${WS_BASE_URL}/chat/sessions/${sessionId}/ws`);
     wsRef.current = ws;
+    setWebApiStatus("connecting");
+
+    ws.addEventListener("open", () => {
+      setWebApiStatus("connected");
+    });
 
     ws.addEventListener("message", (event: MessageEvent) => {
       const chunk: StreamChunk = JSON.parse(event.data as string);
@@ -199,20 +214,31 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             });
           }
           break;
+
+        case "connection_status":
+          if (chunk.sandboxStatus) {
+            setApiSandboxStatus(chunk.sandboxStatus);
+          }
+          break;
       }
     });
 
     ws.addEventListener("error", () => {
+      setWebApiStatus("disconnected");
       setError("WebSocket connection error");
     });
 
     ws.addEventListener("close", () => {
+      setWebApiStatus("disconnected");
+      setApiSandboxStatus("unknown");
       wsRef.current = null;
     });
 
     return () => {
       ws.close();
       wsRef.current = null;
+      setWebApiStatus("disconnected");
+      setApiSandboxStatus("unknown");
     };
   }, [sessionId, isAuthenticated, isLoading, error]);
 
@@ -315,11 +341,14 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b p-4">
-        <div className="flex items-center gap-4">
-          <Link href="/chats" className="text-sm text-muted-foreground hover:text-foreground">
-            &larr; Back
-          </Link>
-          <h1 className="text-lg font-semibold">{session?.title ?? "Untitled Chat"}</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/chats" className="text-sm text-muted-foreground hover:text-foreground">
+              &larr; Back
+            </Link>
+            <h1 className="text-lg font-semibold">{session?.title ?? "Untitled Chat"}</h1>
+          </div>
+          <ConnectionStatusBar webApiStatus={webApiStatus} apiSandboxStatus={apiSandboxStatus} />
         </div>
       </div>
 

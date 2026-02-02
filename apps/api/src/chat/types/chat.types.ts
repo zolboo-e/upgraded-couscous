@@ -21,6 +21,8 @@ export interface QuestionItem {
   multiSelect: boolean;
 }
 
+export type SandboxConnectionStatus = "connected" | "disconnected" | "not_configured";
+
 export interface StreamChunk {
   type:
     | "stream_start"
@@ -29,7 +31,8 @@ export interface StreamChunk {
     | "done"
     | "error"
     | "tool_permission_request"
-    | "ask_user_question";
+    | "ask_user_question"
+    | "connection_status";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -44,6 +47,8 @@ export interface StreamChunk {
   toolInput?: Record<string, unknown>;
   // Ask user question fields
   questions?: QuestionItem[];
+  // Connection status fields
+  sandboxStatus?: SandboxConnectionStatus;
 }
 
 export interface WebSocketMessage {

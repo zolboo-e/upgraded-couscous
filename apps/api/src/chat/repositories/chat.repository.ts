@@ -38,13 +38,6 @@ export class ChatRepository {
     await this.db.delete(sessions).where(eq(sessions.id, id));
   }
 
-  async updateClaudeSessionId(id: string, claudeSessionId: string): Promise<void> {
-    await this.db
-      .update(sessions)
-      .set({ claudeSessionId, updatedAt: new Date() })
-      .where(eq(sessions.id, id));
-  }
-
   async createMessage(data: NewMessage): Promise<Message> {
     const [message] = await this.db.insert(messages).values(data).returning();
     return message;

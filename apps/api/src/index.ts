@@ -7,6 +7,7 @@ import { logger } from "hono/logger";
 import { createAuthModule } from "./auth/index.js";
 import { createChatModule } from "./chat/index.js";
 import { env } from "./config/env.js";
+import { createEchoRoutes } from "./echo.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
 
 const app = new Hono();
@@ -35,6 +36,10 @@ app.route("/auth", authModule.routes);
 // Mount chat routes (with real auth middleware)
 const chatModule = createChatModule(db, upgradeWebSocket, authModule.middleware);
 app.route("/chat", chatModule.routes);
+
+// Mount echo routes (for testing WebSocket proxy)
+const echoRoutes = createEchoRoutes(env, upgradeWebSocket);
+app.route("/echo", echoRoutes);
 
 // Health and root endpoints
 app.get("/", (c) => {

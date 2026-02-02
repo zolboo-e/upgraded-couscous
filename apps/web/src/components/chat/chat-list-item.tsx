@@ -51,7 +51,7 @@ export function ChatListItem({ session, onDelete }: ChatListItemProps): React.Re
   };
 
   return (
-    <Link href={`/chat/${session.id}`} className="block">
+    <Link href={`/chats/${session.id}`} className="block">
       <Card className="transition-colors hover:bg-accent/50">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
           <div className="flex-1">

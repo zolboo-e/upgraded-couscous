@@ -8,7 +8,6 @@ export const sessions = pgTable("sessions", {
     .references(() => users.id, { onDelete: "cascade" }),
   title: text("title"),
   systemPrompt: text("system_prompt"),
-  claudeSessionId: text("claude_session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -10,10 +10,14 @@ out
 # Turbo
 .turbo
 
+# Cloudflare
+.wrangler
+
 # Environment variables
 .env
 .env.local
 .env.*.local
+.dev.vars
 
 # IDE
 .idea
