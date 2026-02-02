@@ -3,7 +3,12 @@
 import { ConnectionStatus, type ConnectionStatusValue } from "./connection-status";
 
 export type WebApiStatus = "connected" | "disconnected" | "connecting";
-export type ApiSandboxStatus = "connected" | "disconnected" | "not_configured" | "unknown";
+export type ApiSandboxStatus =
+  | "connected"
+  | "disconnected"
+  | "connecting"
+  | "not_configured"
+  | "unknown";
 
 interface ConnectionStatusBarProps {
   webApiStatus: WebApiStatus;

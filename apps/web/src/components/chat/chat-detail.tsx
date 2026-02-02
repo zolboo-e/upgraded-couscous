@@ -53,7 +53,7 @@ interface StreamChunk {
   // Ask user question fields
   questions?: QuestionItem[];
   // Connection status fields
-  sandboxStatus?: "connected" | "disconnected" | "not_configured";
+  sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
 }
 
 interface ChatDetailProps {

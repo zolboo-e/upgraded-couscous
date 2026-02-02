@@ -39,6 +39,9 @@ export function createChatRoutes(
 
       return {
         onOpen: async (_evt, ws) => {
+          // Send connecting status immediately so frontend shows progress
+          ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "connecting" }));
+
           try {
             const session = await chatService.getSession(userId, sessionId);
             wsState = await wsHandler.onOpen(
@@ -49,6 +52,8 @@ export function createChatRoutes(
             );
           } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to initialize session";
+            // Send disconnected status so frontend knows connection failed
+            ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }));
             ws.send(JSON.stringify({ type: "error", message }));
             ws.close(1008, message);
           }
