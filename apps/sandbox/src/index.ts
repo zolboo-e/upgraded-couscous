@@ -32,6 +32,8 @@ app.use("*", cors());
 // Protected routes require bearer token
 app.use("/ws", bearerAuth);
 app.use("/files/:sessionId", bearerAuth);
+app.use("/logs/:sessionId", bearerAuth);
+app.use("/debug/:sessionId", bearerAuth);
 
 // Health check endpoint (no auth required)
 app.get("/health", (c) => {
@@ -42,26 +44,27 @@ app.get("/health", (c) => {
   });
 });
 
-// List files in session's .claude directories
+// List files in session's .claude/projects/-workspace directories
 app.get("/files/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  const sandbox = getSandbox(c.env.Sandbox, sessionId, { sleepAfter: "10m" });
+  const isProduction = c.env.ENVIRONMENT === "production";
 
-  // Get sandbox instance for this session
-  const sandbox = getSandbox(c.env.Sandbox, sessionId);
-
-  // Mount R2 bucket if not already mounted
-  const mountCheck = await sandbox.exec(
-    "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
-  );
-  if (mountCheck.stdout.includes("NOT_MOUNTED")) {
-    await sandbox.mountBucket("claude-sessions", "/persistent", {
-      endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    });
+  // Mount R2 bucket only in production
+  if (isProduction) {
+    const mountCheck = await sandbox.exec(
+      "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
+    );
+    if (mountCheck.stdout.includes("NOT_MOUNTED")) {
+      await sandbox.mountBucket("claude-sessions", "/persistent", {
+        endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      });
+    }
   }
 
-  // List files in both directories
-  const persistentPath = `/persistent/${sessionId}/.claude`;
-  const localPath = "/root/.claude";
+  // List files in workspace project directory
+  const persistentPath = `/persistent/${sessionId}/.claude/projects/-workspace`;
+  const localPath = "/root/.claude/projects/-workspace";
 
   // Use find with specific format for easy parsing
   const listCmd = (path: string): string => `
@@ -72,8 +75,11 @@ app.get("/files/:sessionId", async (c) => {
     fi
   `;
 
+  // Only query persistent storage in production
   const [persistentResult, localResult] = await Promise.all([
-    sandbox.exec(listCmd(persistentPath)),
+    isProduction
+      ? sandbox.exec(listCmd(persistentPath))
+      : Promise.resolve({ stdout: "DIR_NOT_FOUND" }),
     sandbox.exec(listCmd(localPath)),
   ]);
 
@@ -104,6 +110,55 @@ app.get("/files/:sessionId", async (c) => {
   });
 });
 
+// Get container logs for a session
+app.get("/logs/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const sandbox = getSandbox(c.env.Sandbox, sessionId, { sleepAfter: "10m" });
+
+  const result = await sandbox.exec("cat /tmp/server.log 2>/dev/null || echo 'No logs yet'");
+  return c.text(result.stdout);
+});
+
+// Debug endpoint to check session restoration state
+app.get("/debug/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const sandbox = getSandbox(c.env.Sandbox, sessionId, { sleepAfter: "10m" });
+  const isProduction = c.env.ENVIRONMENT === "production";
+
+  // Mount R2 if production and not mounted
+  if (isProduction) {
+    const mountCheck = await sandbox.exec(
+      "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
+    );
+    if (mountCheck.stdout.includes("NOT_MOUNTED")) {
+      await sandbox.mountBucket("claude-sessions", "/persistent", {
+        endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      });
+    }
+  }
+
+  // Get restoration logs and current state
+  const [restoreLogs, currentState] = await Promise.all([
+    sandbox.exec("cat /tmp/restore.log 2>/dev/null || echo 'No restore log yet'"),
+    sandbox.exec(`
+      echo "=== Current State ==="
+      echo "R2 (/persistent/${sessionId}/.claude):"
+      ls -la /persistent/${sessionId}/.claude 2>/dev/null || echo "  Not found"
+      echo ""
+      echo "Local (/root/.claude):"
+      ls -la /root/.claude 2>/dev/null || echo "  Not found"
+    `),
+  ]);
+
+  return c.json({
+    sessionId,
+    environment: c.env.ENVIRONMENT ?? "not set",
+    isProduction,
+    restoreLogs: restoreLogs.stdout,
+    currentState: currentState.stdout,
+  });
+});
+
 // WebSocket upgrade endpoint - proxies to the container's Claude Agent SDK server
 app.get("/ws", async (c) => {
   console.log("[/ws] WebSocket upgrade request received");
@@ -119,53 +174,93 @@ app.get("/ws", async (c) => {
   // Use session ID from query parameter or generate a new one
   const sessionId = c.req.query("sessionId") ?? "ws";
   console.log("[/ws] Creating sandbox with sessionId:", sessionId);
-  const sandbox = getSandbox(c.env.Sandbox, sessionId);
+  const sandbox = getSandbox(c.env.Sandbox, sessionId, { sleepAfter: "10m" });
+
+  const isProduction = c.env.ENVIRONMENT === "production";
 
   // Set environment variables FIRST (AWS creds needed for bucket mount)
   await sandbox.setEnvVars({
     ANTHROPIC_API_KEY: c.env.ANTHROPIC_API_KEY,
     AWS_ACCESS_KEY_ID: c.env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: c.env.AWS_SECRET_ACCESS_KEY,
+    ENVIRONMENT: c.env.ENVIRONMENT ?? "development",
   });
   console.log("[/ws] Environment variables set");
 
-  // Mount R2 bucket for session persistence
-  const mountCheck = await sandbox.exec(
-    "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
-  );
-  if (mountCheck.stdout.includes("NOT_MOUNTED")) {
-    await sandbox.mountBucket("claude-sessions", "/persistent", {
-      endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    });
-    console.log("[/ws] R2 bucket mounted at /persistent");
-  } else {
-    console.log("[/ws] /persistent already mounted");
-  }
+  // Mount R2 bucket for session persistence (production only)
+  if (isProduction) {
+    const mountCheck = await sandbox.exec(
+      "mountpoint -q /persistent && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
+    );
+    if (mountCheck.stdout.includes("NOT_MOUNTED")) {
+      await sandbox.mountBucket("claude-sessions", "/persistent", {
+        endpoint: `https://${c.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      });
+      console.log("[/ws] R2 bucket mounted at /persistent");
+    } else {
+      console.log("[/ws] /persistent already mounted");
+    }
 
-  // Ensure required directories exist for Claude Agent SDK
-  // await sandbox.exec("mkdir -p /etc/claude-code/.claude/skills /root/.claude/skills");
+    // Restore session from persistent storage if not already present locally
+    const restoreResult = await sandbox.exec(`
+      LOG="/tmp/restore.log"
+      PERSISTENT_DIR="/persistent/${sessionId}/.claude"
+      LOCAL_DIR="/root/.claude"
 
-  // Restore session from persistent storage if not already present locally
-  const restoreResult = await sandbox.exec(`
-    if [ ! -d "/root/.claude" ] || [ -z "$(ls -A /root/.claude 2>/dev/null)" ]; then
-      if [ -d "/persistent/${sessionId}/.claude" ]; then
-        mkdir -p /root/.claude
-        rsync -a /persistent/${sessionId}/.claude/ /root/.claude/ 2>/dev/null || true
-        echo "RESTORED"
+      echo "=== Restoration started at $(date) ===" > $LOG
+      echo "Session ID: ${sessionId}" >> $LOG
+      echo "ENVIRONMENT: $ENVIRONMENT" >> $LOG
+      echo "" >> $LOG
+
+      echo "=== Checking /persistent mount ===" >> $LOG
+      mountpoint /persistent >> $LOG 2>&1 || echo "/persistent is not a mountpoint" >> $LOG
+      ls -la /persistent 2>&1 | head -20 >> $LOG
+      echo "" >> $LOG
+
+      echo "=== Checking R2 persistent dir ===" >> $LOG
+      ls -la "$PERSISTENT_DIR" 2>&1 >> $LOG
+      echo "" >> $LOG
+
+      echo "=== Checking local dir ===" >> $LOG
+      ls -la "$LOCAL_DIR" 2>&1 >> $LOG
+      echo "" >> $LOG
+
+      # Always sync from R2 if data exists (rsync efficiently skips unchanged files)
+      mkdir -p "$LOCAL_DIR"
+      if [ -d "$PERSISTENT_DIR" ] && [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
+        echo "Syncing from R2..." >> $LOG
+        if rsync -av "$PERSISTENT_DIR/" "$LOCAL_DIR/" >> $LOG 2>&1; then
+          if [ -n "$(ls -A $LOCAL_DIR 2>/dev/null)" ]; then
+            echo "RESTORED" | tee -a $LOG
+          else
+            echo "RESTORE_VERIFY_FAILED" | tee -a $LOG
+          fi
+        else
+          echo "RESTORE_RSYNC_FAILED" | tee -a $LOG
+        fi
       else
-        echo "NO_R2_DATA"
+        echo "NO_R2_DATA" | tee -a $LOG
       fi
-    else
-      echo "ALREADY_PRESENT"
-    fi
-  `);
-  const restoreStatus = restoreResult.stdout.trim();
-  if (restoreStatus === "RESTORED") {
-    console.log("[/ws] Session restored from R2 for:", sessionId);
-  } else if (restoreStatus === "ALREADY_PRESENT") {
-    console.log("[/ws] Session already in container, skipping R2 restore:", sessionId);
+
+      echo "" >> $LOG
+      echo "=== Final state ===" >> $LOG
+      echo "Local:" >> $LOG
+      ls -la "$LOCAL_DIR" 2>&1 >> $LOG
+    `);
+    const restoreStatus = restoreResult.stdout.trim();
+    if (restoreStatus === "RESTORED") {
+      console.log("[/ws] Session synced from R2 for:", sessionId);
+    } else if (restoreStatus === "RESTORE_RSYNC_FAILED") {
+      console.error("[/ws] Failed to restore session - rsync error for:", sessionId);
+      return c.json({ error: "Failed to restore session data from storage" }, 503);
+    } else if (restoreStatus === "RESTORE_VERIFY_FAILED") {
+      console.error("[/ws] Failed to restore session - verification failed for:", sessionId);
+      return c.json({ error: "Session restoration verification failed" }, 503);
+    } else {
+      console.log("[/ws] No R2 data to restore for:", sessionId);
+    }
   } else {
-    console.log("[/ws] No R2 data to restore for:", sessionId);
+    console.log("[/ws] Skipping R2 mount/restore (development mode)");
   }
 
   // Start server.ts using startProcess (inherits env vars from setEnvVars)

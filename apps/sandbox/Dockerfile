@@ -11,7 +11,7 @@ ENV PATH="/root/.local/bin:$PATH"
 
 # Install runtime dependencies in /workspace
 WORKDIR /workspace
-RUN bun install hono @hono/node-server ws @anthropic-ai/claude-agent-sdk
+RUN bun install hono @hono/node-server ws @anthropic-ai/claude-agent-sdk @upstash/redis
 
 # Copy server files
 COPY container/server.ts /workspace/server.ts

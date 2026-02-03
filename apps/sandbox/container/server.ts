@@ -4,37 +4,59 @@
  */
 
 import { exec } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { promisify } from "node:util";
 import { query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { serve } from "@hono/node-server";
+import { Redis } from "@upstash/redis";
 import { Hono } from "hono";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
+// Upstash Redis client for shutdown logging (testing)
+const redis = new Redis({
+  url: "https://tough-emu-62604.upstash.io",
+  token: "AfSMAAIncDFiMDlhODIzMzgyZGM0YWM0YTc1ZDlmYWVjZjBkNjQ3MHAxNjI2MDQ",
+});
+
 const execAsync = promisify(exec);
 
-async function checkSessionExists(sessionId: string): Promise<boolean> {
-  try {
-    // Check if session file exists in Claude's session storage
-    // Claude Agent SDK stores sessions by ID in ~/.claude/
-    const result = await execAsync(
-      `find /root/.claude -name "*${sessionId}*" -type f 2>/dev/null | head -1`,
-    );
-    return result.stdout.trim().length > 0;
-  } catch {
-    return false;
+const LOG_FILE = "/tmp/server.log";
+
+async function checkSessionExists(sessionId: string, retries = 3): Promise<boolean> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      // Check if session file exists in Claude's session storage
+      // Claude Agent SDK stores sessions by ID in ~/.claude/
+      const result = await execAsync(
+        `find /root/.claude -name "*${sessionId}*" -type f 2>/dev/null | head -1`,
+      );
+      if (result.stdout.trim().length > 0) {
+        return true;
+      }
+      // Wait briefly before retry to allow filesystem to settle
+      if (attempt < retries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } catch {
+      // Continue to next retry
+    }
   }
+  return false;
 }
 
-// Simple logger with timestamps
+// Simple logger with timestamps - writes to console, file, and Upstash
 function log(level: "info" | "error" | "debug", message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
-  if (data !== undefined) {
-    console.log(`${prefix} ${message}`, JSON.stringify(data));
-  } else {
-    console.log(`${prefix} ${message}`);
-  }
+  const line =
+    data !== undefined ? `${prefix} ${message} ${JSON.stringify(data)}` : `${prefix} ${message}`;
+
+  console.log(line);
+  appendFileSync(LOG_FILE, `${line}\n`);
+
+  // Also push to Upstash (fire and forget)
+  redis.lpush("sandbox:server:logs", line).catch(() => {});
 }
 
 interface IncomingMessage {
@@ -56,61 +78,79 @@ interface OutgoingMessage {
 }
 
 interface SessionState {
-  messageQueue: AsyncIterableIterator<SDKUserMessage> | null;
-  pushMessage: ((msg: SDKUserMessage) => void) | null;
-  closeQueue: (() => void) | null;
   sessionId: string | null; // DB session UUID for R2 sync path
 }
 
 // Track active sessions
 const sessions = new Map<WebSocket, SessionState>();
 
-// Create a message queue that can receive messages asynchronously
-function createMessageQueue(): {
-  iterator: AsyncIterableIterator<SDKUserMessage>;
-  push: (msg: SDKUserMessage) => void;
-  close: () => void;
-} {
-  const queue: SDKUserMessage[] = [];
-  let resolve: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
-  let done = false;
+/**
+ * Manages per-session infinite message queues.
+ * Each WebSocket gets its own queue that stays alive until the connection closes.
+ */
+class SessionMessageQueue {
+  private queues = new Map<WebSocket, SDKUserMessage[]>();
+  private resolvers = new Map<WebSocket, (msg: SDKUserMessage) => void>();
+  private closed = new Set<WebSocket>();
 
-  const iterator: AsyncIterableIterator<SDKUserMessage> = {
-    [Symbol.asyncIterator]() {
-      return this;
-    },
-    async next(): Promise<IteratorResult<SDKUserMessage>> {
-      const nextMessage = queue.shift();
-      if (nextMessage !== undefined) {
-        return { value: nextMessage, done: false };
-      }
-      if (done) {
-        return { value: undefined as unknown as SDKUserMessage, done: true };
-      }
-      return new Promise((res) => {
-        resolve = res;
-      });
-    },
-  };
+  enqueue(ws: WebSocket, msg: SDKUserMessage): void {
+    if (this.closed.has(ws)) {
+      log("debug", "Ignoring message for closed session");
+      return;
+    }
 
-  return {
-    iterator,
-    push: (msg: SDKUserMessage) => {
-      if (resolve) {
-        resolve({ value: msg, done: false });
-        resolve = null;
+    const resolver = this.resolvers.get(ws);
+    if (resolver) {
+      resolver(msg);
+      this.resolvers.delete(ws);
+    } else {
+      const queue = this.queues.get(ws) || [];
+      queue.push(msg);
+      this.queues.set(ws, queue);
+    }
+  }
+
+  async *consume(ws: WebSocket): AsyncGenerator<SDKUserMessage> {
+    while (!this.closed.has(ws)) {
+      const queue = this.queues.get(ws);
+      const msg = queue?.shift();
+      if (msg !== undefined) {
+        yield msg;
       } else {
-        queue.push(msg);
+        try {
+          const nextMsg = await new Promise<SDKUserMessage>((resolve, reject) => {
+            // Check if closed while waiting
+            if (this.closed.has(ws)) {
+              reject(new Error("Session closed"));
+              return;
+            }
+            this.resolvers.set(ws, resolve);
+          });
+          yield nextMsg;
+        } catch {
+          // Session was closed while waiting
+          break;
+        }
       }
-    },
-    close: () => {
-      done = true;
-      if (resolve) {
-        resolve({ value: undefined as unknown as SDKUserMessage, done: true });
-      }
-    },
-  };
+    }
+    log("debug", "Message queue consumer exited");
+  }
+
+  cleanup(ws: WebSocket): void {
+    this.closed.add(ws);
+    // Reject any pending resolver to unblock the consumer
+    const resolver = this.resolvers.get(ws);
+    if (resolver) {
+      // Resolve with a dummy message that will be ignored due to closed check
+      this.resolvers.delete(ws);
+    }
+    this.queues.delete(ws);
+    // Allow cleanup to be called multiple times safely
+    setTimeout(() => this.closed.delete(ws), 1000);
+  }
 }
+
+const sessionQueue = new SessionMessageQueue();
 
 function createUserMessage(content: string): SDKUserMessage {
   return {
@@ -125,27 +165,61 @@ function createUserMessage(content: string): SDKUserMessage {
 }
 
 async function syncSessionToPersistent(sessionId: string | null): Promise<void> {
+  if (process.env.ENVIRONMENT !== "production") {
+    log("debug", "Session sync skipped (not production)");
+    return;
+  }
+
   if (!sessionId) {
     log("debug", "Session sync skipped (no sessionId)");
     return;
   }
 
-  try {
-    log("info", "Syncing session to persistent storage", { sessionId });
+  const targetBase = `/persistent/${sessionId}/.claude`;
+  log("info", "Starting background sync to persistent storage", { sessionId });
 
-    // Ensure target directory exists (using sessionId as prefix for isolation)
-    await execAsync(`mkdir -p /persistent/${sessionId}/.claude`);
+  // Ensure target directories exist, then run rsync in background with --update
+  execAsync(`mkdir -p ${targetBase}/projects ${targetBase}/todos`)
+    .then(() => {
+      // Run rsync in background with --update (skip newer files on destination)
+      const projectsStart = Date.now();
+      execAsync(`rsync -a /root/.claude/projects/ ${targetBase}/projects/`)
+        .then(() =>
+          log("info", "Rsync projects completed", {
+            sessionId,
+            durationMs: Date.now() - projectsStart,
+          }),
+        )
+        .catch((error) =>
+          log("error", "Rsync projects failed", {
+            sessionId,
+            durationMs: Date.now() - projectsStart,
+            error: error instanceof Error ? error.message : error,
+          }),
+        );
 
-    // Sync ~/.claude to /persistent/${sessionId}/.claude using rsync
-    await execAsync(`rsync -a /root/.claude/ /persistent/${sessionId}/.claude/`);
+      const todosStart = Date.now();
+      execAsync(`rsync -a /root/.claude/todos/ ${targetBase}/todos/`)
+        .then(() =>
+          log("info", "Rsync todos completed", { sessionId, durationMs: Date.now() - todosStart }),
+        )
+        .catch((error) =>
+          log("error", "Rsync todos failed", {
+            sessionId,
+            durationMs: Date.now() - todosStart,
+            error: error instanceof Error ? error.message : error,
+          }),
+        );
 
-    // Force flush to ensure writes are persisted
-    await execAsync("sync");
-
-    log("info", "Session synced to persistent storage", { sessionId });
-  } catch (error) {
-    log("error", "Failed to sync session", error instanceof Error ? error.message : error);
-  }
+      log("info", "Background rsync started", { sessionId });
+    })
+    .catch((error) => {
+      log(
+        "error",
+        "Failed to create sync directories",
+        error instanceof Error ? error.message : error,
+      );
+    });
 }
 
 function sendMessage(ws: WebSocket, msg: OutgoingMessage): boolean {
@@ -173,10 +247,20 @@ async function processClaudeMessages(
   try {
     log("info", "Starting Claude query processing");
     for await (const message of claudeQuery) {
-      log("debug", "Received SDK message", {
-        type: message.type,
-        subtype: (message as { subtype?: string }).subtype,
-      });
+      // Check if WebSocket is still open
+      if (ws.readyState !== WebSocket.OPEN) {
+        log("info", "WebSocket closed, stopping message processing");
+        break;
+      }
+
+      if (message.type === "result") {
+        log("info", "Received SDK result message", message);
+      } else {
+        log("debug", "Received SDK message", {
+          type: message.type,
+          subtype: (message as { subtype?: string }).subtype,
+        });
+      }
 
       // Handle assistant message content
       if (message.type === "assistant") {
@@ -251,22 +335,20 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
   const sessionExists = message.sessionId ? await checkSessionExists(message.sessionId) : false;
   log("info", "Session check", { sessionId: message.sessionId, exists: sessionExists });
 
-  // Create message queue for streaming input
-  const { iterator, push, close } = createMessageQueue();
-
   // Store session info
   sessions.set(ws, {
-    messageQueue: iterator,
-    pushMessage: push,
-    closeQueue: close,
     sessionId: message.sessionId ?? null,
   });
+
+  // Create infinite prompt generator for this WebSocket
+  // This generator stays alive until the WebSocket closes
+  const promptGenerator = sessionQueue.consume(ws);
 
   // Start Claude query with session-id for persistence
   // - extraArgs: { "session-id": ... } sets the session ID for new sessions
   // - resume: sessionId restores existing session state from disk
   const claudeQuery = query({
-    prompt: iterator,
+    prompt: promptGenerator,
     options: {
       model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
       systemPrompt: message.systemPrompt,
@@ -277,6 +359,7 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
   });
 
   // Process messages in background with error handling
+  // This loop runs until the WebSocket closes or an error occurs
   processClaudeMessages(ws, claudeQuery, message.sessionId ?? null).catch((error) => {
     log("error", "Claude processing error", error instanceof Error ? error.stack : error);
     sendMessage(ws, { type: "error", message: "Claude processing failed" });
@@ -284,7 +367,7 @@ async function handleStart(ws: WebSocket, message: IncomingMessage): Promise<voi
 
   // Send initial message if provided
   if (message.content) {
-    push(createUserMessage(message.content));
+    sessionQueue.enqueue(ws, createUserMessage(message.content));
   }
 }
 
@@ -292,7 +375,7 @@ function handleUserMessage(ws: WebSocket, message: IncomingMessage): void {
   log("info", "Received user message", { contentLength: message.content?.length ?? 0 });
 
   const session = sessions.get(ws);
-  if (!session?.pushMessage) {
+  if (!session) {
     log("error", "Session not initialized for user message");
     sendMessage(ws, { type: "error", message: "Session not initialized" });
     return;
@@ -300,15 +383,12 @@ function handleUserMessage(ws: WebSocket, message: IncomingMessage): void {
 
   if (message.content) {
     log("info", "Pushing message to Claude queue");
-    session.pushMessage(createUserMessage(message.content));
+    sessionQueue.enqueue(ws, createUserMessage(message.content));
   }
 }
 
 function handleClose(ws: WebSocket): void {
-  const session = sessions.get(ws);
-  if (session?.closeQueue) {
-    session.closeQueue();
-  }
+  sessionQueue.cleanup(ws);
   sessions.delete(ws);
 }
 
@@ -378,9 +458,42 @@ wss.on("connection", (ws) => {
 
 log("info", "WebSocket server attached (accepts all paths)");
 
+// Shutdown log structure for Upstash
+interface ShutdownLogEntry {
+  timestamp: string;
+  signal: string;
+  sessionIds: string[];
+  connectionsCount: number;
+  syncedSessions: Array<{
+    sessionId: string;
+    status: "success" | "error";
+    error?: string;
+  }>;
+  shutdownStatus: "success" | "timeout" | "error";
+  errorMessage?: string;
+  durationMs: number;
+  logs: string;
+}
+
+// Log shutdown data to Upstash Redis
+async function logShutdownToUpstash(entry: ShutdownLogEntry): Promise<void> {
+  try {
+    await redis.lpush("sandbox:shutdown:logs", JSON.stringify(entry));
+    log("info", "Shutdown logged to Upstash");
+  } catch (error) {
+    log("error", "Failed to log to Upstash", error instanceof Error ? error.message : error);
+  }
+}
+
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string): Promise<void> {
+  const startTime = Date.now();
   log("info", `Received ${signal} - starting graceful shutdown`);
+
+  const syncResults: ShutdownLogEntry["syncedSessions"] = [];
+  const sessionIds: string[] = [];
+  let shutdownStatus: ShutdownLogEntry["shutdownStatus"] = "success";
+  let errorMessage: string | undefined;
 
   try {
     // 1. Close all WebSocket connections gracefully
@@ -401,16 +514,44 @@ async function gracefulShutdown(signal: string): Promise<void> {
     log("info", `Closed ${closePromises.length} WebSocket connections`);
 
     // 2. Clean up all sessions and sync to persistent storage
-    for (const [, session] of sessions.entries()) {
-      if (session.closeQueue) {
-        session.closeQueue();
-      }
-      // Sync each session to R2
+    for (const [ws, session] of sessions.entries()) {
+      sessionQueue.cleanup(ws);
       if (session.sessionId) {
-        await syncSessionToPersistent(session.sessionId);
+        sessionIds.push(session.sessionId);
+        try {
+          await syncSessionToPersistent(session.sessionId);
+          syncResults.push({ sessionId: session.sessionId, status: "success" });
+        } catch (error) {
+          syncResults.push({
+            sessionId: session.sessionId,
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
     sessions.clear();
+
+    // 3. Log to Upstash before closing servers
+    const logs = await (async () => {
+      try {
+        const { stdout } = await execAsync("cat /tmp/server.log 2>/dev/null || echo ''");
+        return stdout;
+      } catch {
+        return "";
+      }
+    })();
+
+    await logShutdownToUpstash({
+      timestamp: new Date().toISOString(),
+      signal,
+      sessionIds,
+      connectionsCount: closePromises.length,
+      syncedSessions: syncResults,
+      shutdownStatus,
+      durationMs: Date.now() - startTime,
+      logs,
+    });
 
     // 4. Close WebSocket server
     wss.close(() => {
@@ -424,12 +565,47 @@ async function gracefulShutdown(signal: string): Promise<void> {
     });
 
     // Force exit after timeout (Cloudflare grace period is ~10-30s)
-    setTimeout(() => {
+    setTimeout(async () => {
       log("error", "Shutdown timeout exceeded - forcing exit");
+      await logShutdownToUpstash({
+        timestamp: new Date().toISOString(),
+        signal,
+        sessionIds,
+        connectionsCount: closePromises.length,
+        syncedSessions: syncResults,
+        shutdownStatus: "timeout",
+        durationMs: Date.now() - startTime,
+        logs,
+      });
       process.exit(1);
     }, 8000);
   } catch (error) {
-    log("error", "Shutdown error", error instanceof Error ? error.message : error);
+    errorMessage = error instanceof Error ? error.message : String(error);
+    log("error", "Shutdown error", errorMessage);
+    shutdownStatus = "error";
+
+    // Log error to Upstash
+    const logs = await (async () => {
+      try {
+        const { stdout } = await execAsync("cat /tmp/server.log 2>/dev/null || echo ''");
+        return stdout;
+      } catch {
+        return "";
+      }
+    })();
+
+    await logShutdownToUpstash({
+      timestamp: new Date().toISOString(),
+      signal,
+      sessionIds,
+      connectionsCount: 0,
+      syncedSessions: syncResults,
+      shutdownStatus,
+      errorMessage,
+      durationMs: Date.now() - startTime,
+      logs,
+    });
+
     process.exit(1);
   }
 }
