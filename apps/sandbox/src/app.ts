@@ -1,6 +1,13 @@
 import { Hono } from "hono";
 import { bearerAuth, corsMiddleware } from "./middleware/index.js";
-import { debugRoute, filesRoute, healthRoute, logsRoute, websocketRoute } from "./routes/index.js";
+import {
+  debugRoute,
+  filesRoute,
+  healthRoute,
+  logsRoute,
+  websocketRoute,
+  websocketV2Route,
+} from "./routes/index.js";
 import type { AppEnv } from "./types/index.js";
 
 /**
@@ -26,6 +33,9 @@ function createApp(): Hono<AppEnv> {
   app.route("/files", filesRoute);
   app.route("/logs", logsRoute);
   app.route("/debug", debugRoute);
+
+  // WebSocket v2 route (uses JWT auth, not bearer token)
+  app.route("/ws/v2", websocketV2Route);
 
   return app;
 }

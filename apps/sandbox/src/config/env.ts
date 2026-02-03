@@ -41,3 +41,11 @@ export const CONTAINER_CONFIG = {
 export const SANDBOX_CONFIG = {
   sleepAfter: "10m",
 } as const;
+
+/**
+ * API configuration for SessionDO persistence
+ * These are set via wrangler.jsonc vars or secrets:
+ * - API_BASE_URL: Base URL of the API server
+ * - INTERNAL_API_TOKEN: Service-to-service auth token
+ * - JWT_SECRET: Secret for validating user JWTs (shared with API)
+ */

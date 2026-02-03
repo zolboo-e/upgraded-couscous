@@ -8,6 +8,7 @@ import { createAuthModule } from "./auth/index.js";
 import { createChatModule } from "./chat/index.js";
 import { env } from "./config/env.js";
 import { createEchoRoutes } from "./echo.js";
+import { createInternalModule } from "./internal/index.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
 
 const app = new Hono();
@@ -40,6 +41,10 @@ app.route("/chat", chatModule.routes);
 // Mount echo routes (for testing WebSocket proxy)
 const echoRoutes = createEchoRoutes(env, upgradeWebSocket);
 app.route("/echo", echoRoutes);
+
+// Mount internal routes (for service-to-service communication)
+const internalModule = createInternalModule(db);
+app.route("/internal", internalModule.routes);
 
 // Health and root endpoints
 app.get("/", (c) => {

@@ -6,6 +6,12 @@
   "observability": {
     "enabled": true
   },
+  // Environment variables for SessionDO (set actual values via wrangler secret)
+  "vars": {
+    "JWT_SECRET": "",
+    "API_BASE_URL": "",
+    "INTERNAL_API_TOKEN": ""
+  },
   "containers": [
     {
       "class_name": "Sandbox",
@@ -19,6 +25,10 @@
       {
         "class_name": "Sandbox",
         "name": "Sandbox"
+      },
+      {
+        "class_name": "SessionDO",
+        "name": "SessionDO"
       }
     ]
   },
@@ -26,6 +36,10 @@
     {
       "new_sqlite_classes": ["Sandbox"],
       "tag": "v1"
+    },
+    {
+      "new_classes": ["SessionDO"],
+      "tag": "v2"
     }
   ],
   "r2_buckets": [

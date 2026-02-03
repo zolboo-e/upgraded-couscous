@@ -9,6 +9,8 @@ const envSchema = z.object({
   // Cloudflare Sandbox configuration
   SANDBOX_WS_URL: z.string().url().optional(),
   SANDBOX_API_TOKEN: z.string().min(32).optional(),
+  // Internal API token for service-to-service auth (Gateway -> API)
+  INTERNAL_API_TOKEN: z.string().min(32).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
