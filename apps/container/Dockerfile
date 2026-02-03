@@ -43,11 +43,5 @@ WORKDIR /workspace
 COPY --from=builder /app/apps/container/dist ./dist
 COPY --from=builder /app/apps/container/package.json ./package.json
 
-# Install pnpm and production dependencies
-# RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
-# RUN bun install --prod
-# RUN bun install -g pnpm
-# RUN pnpm install --prod
-
 ENV COMMAND_TIMEOUT_MS=300000
 EXPOSE 8080
