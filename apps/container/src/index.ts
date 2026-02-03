@@ -7,16 +7,20 @@ import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { type WebSocket, WebSocketServer } from "ws";
+import { getModel, SERVER_CONFIG } from "./config/index.js";
 import { handleConnection, type MessageHandlerDeps } from "./handlers/index.js";
-import { createLogger, execAsync } from "./logger.js";
+import {
+  createLogger,
+  createTelemetry,
+  execAsync,
+  syncSessionToPersistent,
+} from "./services/index.js";
 import { SessionMessageQueue } from "./session/index.js";
 import { createGracefulShutdown } from "./shutdown/index.js";
-import { syncSessionToPersistent } from "./sync/index.js";
-import { createTelemetry, DEFAULT_REDIS_TOKEN, DEFAULT_REDIS_URL } from "./telemetry.js";
-import type { SessionState } from "./types.js";
+import type { SessionState } from "./types/index.js";
 
-// Create telemetry client
-const telemetry = createTelemetry(DEFAULT_REDIS_URL, DEFAULT_REDIS_TOKEN);
+// Create telemetry client (uses env vars, no-op if not configured)
+const telemetry = createTelemetry();
 
 // Create logger with telemetry
 const logger = createLogger(telemetry);
@@ -28,12 +32,11 @@ const sessions = new Map<WebSocket, SessionState>();
 const sessionQueue = new SessionMessageQueue(logger);
 
 // Get model from environment
-const model = process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514";
-const environment = process.env.ENVIRONMENT;
+const model = getModel();
 
 // Create sync function
 const syncSession = (sessionId: string | null): Promise<void> => {
-  return syncSessionToPersistent(sessionId, execAsync, logger, environment);
+  return syncSessionToPersistent(sessionId, execAsync, logger);
 };
 
 // Create handler dependencies
@@ -55,8 +58,8 @@ app.get("/health", (c) => {
 });
 
 // Start HTTP server
-const server = serve({ fetch: app.fetch, port: 8080 }, () => {
-  logger.info("Claude Agent SDK WebSocket server listening on port 8080");
+const server = serve({ fetch: app.fetch, port: SERVER_CONFIG.port }, () => {
+  logger.info(`Claude Agent SDK WebSocket server listening on port ${SERVER_CONFIG.port}`);
 });
 
 // Create a single WebSocket server on root path (wsConnect doesn't preserve paths)

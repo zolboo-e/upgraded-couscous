@@ -1,6 +1,6 @@
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { WebSocket } from "ws";
-import type { Logger } from "../types.js";
+import type { Logger } from "../types/index.js";
 
 /**
  * Manages per-session infinite message queues.

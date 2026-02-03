@@ -1,6 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { WebSocket } from "ws";
-import type { Logger } from "../types.js";
+import type { Logger } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 
 /**

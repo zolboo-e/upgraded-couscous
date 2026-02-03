@@ -1,4 +1,4 @@
-import type { ExecFn, Logger } from "../types.js";
+import type { ExecFn, Logger } from "../types/index.js";
 
 /**
  * Check if a session exists on disk

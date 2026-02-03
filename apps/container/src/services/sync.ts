@@ -1,4 +1,5 @@
-import type { ExecFn, Logger } from "../types.js";
+import { isProduction, SYNC_CONFIG } from "../config/index.js";
+import type { ExecFn, Logger } from "../types/index.js";
 
 /**
  * Sync session files to persistent R2 storage
@@ -7,9 +8,8 @@ export async function syncSessionToPersistent(
   sessionId: string | null,
   execFn: ExecFn,
   logger: Logger,
-  environment: string | undefined,
 ): Promise<void> {
-  if (environment !== "production") {
+  if (!isProduction()) {
     logger.debug("Session sync skipped (not production)");
     return;
   }
@@ -19,15 +19,17 @@ export async function syncSessionToPersistent(
     return;
   }
 
-  const targetBase = `/persistent/${sessionId}/.claude`;
+  const targetBase = `${SYNC_CONFIG.basePath}/${sessionId}/.claude`;
   logger.info("Starting background sync to persistent storage", { sessionId });
 
   // Ensure target directories exist, then run rsync in background with --update
-  execFn(`mkdir -p ${targetBase}/projects ${targetBase}/todos`)
+  execFn(`mkdir -p ${targetBase}/${SYNC_CONFIG.projectsDir} ${targetBase}/${SYNC_CONFIG.todosDir}`)
     .then(() => {
       // Run rsync in background with --update (skip newer files on destination)
       const projectsStart = Date.now();
-      execFn(`rsync -a /root/.claude/projects/ ${targetBase}/projects/`)
+      execFn(
+        `rsync -a ${SYNC_CONFIG.localPath}/${SYNC_CONFIG.projectsDir}/ ${targetBase}/${SYNC_CONFIG.projectsDir}/`,
+      )
         .then(() =>
           logger.info("Rsync projects completed", {
             sessionId,
@@ -43,7 +45,9 @@ export async function syncSessionToPersistent(
         );
 
       const todosStart = Date.now();
-      execFn(`rsync -a /root/.claude/todos/ ${targetBase}/todos/`)
+      execFn(
+        `rsync -a ${SYNC_CONFIG.localPath}/${SYNC_CONFIG.todosDir}/ ${targetBase}/${SYNC_CONFIG.todosDir}/`,
+      )
         .then(() =>
           logger.info("Rsync todos completed", { sessionId, durationMs: Date.now() - todosStart }),
         )

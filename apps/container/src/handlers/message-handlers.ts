@@ -5,7 +5,7 @@ import {
   createUserMessage,
   type SessionMessageQueue,
 } from "../session/index.js";
-import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types.js";
+import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 import { processClaudeMessages } from "./claude-processor.js";
 

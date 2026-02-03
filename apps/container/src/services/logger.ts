@@ -1,9 +1,8 @@
 import { exec } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { promisify } from "node:util";
-import type { ExecFn, Logger, Telemetry } from "./types.js";
-
-export const LOG_FILE = "/tmp/server.log";
+import { SERVER_CONFIG } from "../config/index.js";
+import type { ExecFn, Logger, Telemetry } from "../types/index.js";
 
 /**
  * Promisified exec for shell commands
@@ -21,7 +20,7 @@ export function createLogger(telemetry?: Telemetry): Logger {
       data !== undefined ? `${prefix} ${message} ${JSON.stringify(data)}` : `${prefix} ${message}`;
 
     console.log(line);
-    appendFileSync(LOG_FILE, `${line}\n`);
+    appendFileSync(SERVER_CONFIG.logFile, `${line}\n`);
 
     // Also push to Upstash (fire and forget)
     if (telemetry) {

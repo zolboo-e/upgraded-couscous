@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { WebSocket, type WebSocketServer } from "ws";
 import type { SessionMessageQueue } from "../session/message-queue.js";
-import type { ExecFn, Logger, SessionState, ShutdownLogEntry, Telemetry } from "../types.js";
+import type { ExecFn, Logger, SessionState, ShutdownLogEntry, Telemetry } from "../types/index.js";
 
 export interface ShutdownDeps {
   wss: WebSocketServer;

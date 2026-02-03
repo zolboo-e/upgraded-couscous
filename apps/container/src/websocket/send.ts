@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import type { Logger, OutgoingMessage } from "../types.js";
+import type { Logger, OutgoingMessage } from "../types/index.js";
 
 /**
  * Send a message through WebSocket
