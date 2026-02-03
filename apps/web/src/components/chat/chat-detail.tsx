@@ -19,11 +19,7 @@ import {
 } from "./ask-user-question";
 import { ChatInput } from "./chat-input";
 import { ChatMessage, StreamingMessage } from "./chat-message";
-import {
-  type ApiSandboxStatus,
-  ConnectionStatusBar,
-  type WebApiStatus,
-} from "./connection-status-bar";
+import { type AgentStatus, ConnectionStatusBar, type ServerStatus } from "./connection-status-bar";
 import {
   ToolPermissionDialog,
   type ToolPermissionRequest,
@@ -74,8 +70,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<ToolPermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<AskUserQuestionRequest | null>(null);
-  const [webApiStatus, setWebApiStatus] = useState<WebApiStatus>("disconnected");
-  const [apiSandboxStatus, setApiSandboxStatus] = useState<ApiSandboxStatus>("unknown");
+  const [serverStatus, setServerStatus] = useState<ServerStatus>("disconnected");
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("unknown");
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -135,20 +131,20 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
-      setWebApiStatus("connecting");
+      setServerStatus("connecting");
 
       ws.addEventListener("open", () => {
-        setWebApiStatus("connected");
+        setServerStatus("connected");
       });
 
       ws.addEventListener("message", handleMessage);
 
       ws.addEventListener("close", () => {
-        setWebApiStatus("disconnected");
+        setServerStatus("disconnected");
       });
 
       ws.addEventListener("error", () => {
-        setWebApiStatus("disconnected");
+        setServerStatus("disconnected");
       });
     };
 
@@ -240,7 +236,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
         case "connection_status":
           if (chunk.sandboxStatus) {
-            setApiSandboxStatus(chunk.sandboxStatus);
+            setAgentStatus(chunk.sandboxStatus);
           }
           break;
       }
@@ -253,8 +249,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
         wsRef.current.close();
         wsRef.current = null;
       }
-      setWebApiStatus("disconnected");
-      setApiSandboxStatus("unknown");
+      setServerStatus("disconnected");
+      setAgentStatus("unknown");
     };
   }, [sessionId, isAuthenticated, isLoading, error]);
 
@@ -364,7 +360,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             </Link>
             <h1 className="text-lg font-semibold">{session?.title ?? "Untitled Chat"}</h1>
           </div>
-          <ConnectionStatusBar webApiStatus={webApiStatus} apiSandboxStatus={apiSandboxStatus} />
+          <ConnectionStatusBar serverStatus={serverStatus} agentStatus={agentStatus} />
         </div>
       </div>
 

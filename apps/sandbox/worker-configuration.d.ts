@@ -14,6 +14,9 @@ declare namespace Cloudflare {
 		AWS_SECRET_ACCESS_KEY: string;
 		CF_ACCOUNT_ID: string;
 		ENVIRONMENT: string;
+        JWT_SECRET: string;
+        API_BASE_URL: string;
+        INTERNAL_API_TOKEN: string;
 		Sandbox: DurableObjectNamespace<import("./src/index").Sandbox>;
 		SessionDO: DurableObjectNamespace<import("./src/index").SessionDO>;
 	}

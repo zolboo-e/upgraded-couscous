@@ -2,8 +2,8 @@
 
 import { ConnectionStatus, type ConnectionStatusValue } from "./connection-status";
 
-export type WebApiStatus = "connected" | "disconnected" | "connecting";
-export type ApiSandboxStatus =
+export type ServerStatus = "connected" | "disconnected" | "connecting";
+export type AgentStatus =
   | "connected"
   | "disconnected"
   | "connecting"
@@ -11,23 +11,23 @@ export type ApiSandboxStatus =
   | "unknown";
 
 interface ConnectionStatusBarProps {
-  webApiStatus: WebApiStatus;
-  apiSandboxStatus: ApiSandboxStatus;
+  serverStatus: ServerStatus;
+  agentStatus: AgentStatus;
 }
 
 export function ConnectionStatusBar({
-  webApiStatus,
-  apiSandboxStatus,
+  serverStatus,
+  agentStatus,
 }: ConnectionStatusBarProps): React.ReactElement {
   return (
     <div className="flex items-center gap-4 text-sm">
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">API:</span>
-        <ConnectionStatus status={webApiStatus as ConnectionStatusValue} showLabel={false} />
+        <span className="text-muted-foreground">Server:</span>
+        <ConnectionStatus status={serverStatus as ConnectionStatusValue} showLabel={false} />
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">Sandbox:</span>
-        <ConnectionStatus status={apiSandboxStatus as ConnectionStatusValue} showLabel={false} />
+        <span className="text-muted-foreground">Agent:</span>
+        <ConnectionStatus status={agentStatus as ConnectionStatusValue} showLabel={false} />
       </div>
     </div>
   );
