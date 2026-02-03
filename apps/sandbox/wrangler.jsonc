@@ -9,7 +9,8 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "./Dockerfile",
+      "image": "../container/Dockerfile",
+      "image_build_context": "../../",
       "instance_type": "basic"
     }
   ],

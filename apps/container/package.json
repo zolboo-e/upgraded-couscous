@@ -1,0 +1,26 @@
+{
+  "name": "@repo/container",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
+    "@hono/node-server": "^1.19.9",
+    "@upstash/redis": "^1.36.1",
+    "hono": "^4.11.7",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^25.2.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

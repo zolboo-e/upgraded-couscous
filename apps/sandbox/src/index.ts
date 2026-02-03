@@ -263,8 +263,8 @@ app.get("/ws", async (c) => {
     console.log("[/ws] Skipping R2 mount/restore (development mode)");
   }
 
-  // Start server.ts using startProcess (inherits env vars from setEnvVars)
-  const process = await sandbox.startProcess("bun /workspace/server.ts");
+  // Start container server using startProcess (inherits env vars from setEnvVars)
+  const process = await sandbox.startProcess("bun /workspace/dist/index.js");
   console.log("[/ws] Process started with ID:", process.id);
 
   // Wait for server to be ready on port 8080

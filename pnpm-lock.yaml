@@ -70,6 +70,40 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  apps/container:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.29
+        version: 0.2.29(zod@4.3.6)
+      '@hono/node-server':
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.7)
+      '@upstash/redis':
+        specifier: ^1.36.1
+        version: 1.36.1
+      hono:
+        specifier: ^4.11.7
+        version: 4.11.7
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^25.2.0
+        version: 25.2.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   apps/sandbox:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':

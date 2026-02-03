@@ -1,0 +1,187 @@
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { RawData, WebSocket } from "ws";
+import {
+  checkSessionExists,
+  createUserMessage,
+  type SessionMessageQueue,
+} from "../session/index.js";
+import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types.js";
+import { sendMessage } from "../websocket/send.js";
+import { processClaudeMessages } from "./claude-processor.js";
+
+export interface MessageHandlerDeps extends HandlerDependencies {
+  sessionQueue: SessionMessageQueue;
+  execFn: ExecFn;
+  model: string;
+}
+
+/**
+ * Handle start message - initialize Claude query
+ */
+export async function handleStart(
+  ws: WebSocket,
+  message: IncomingMessage,
+  deps: MessageHandlerDeps,
+): Promise<void> {
+  const { sessions, sessionQueue, logger, syncSession, execFn, model } = deps;
+
+  logger.info("Starting session", {
+    hasContent: !!message.content,
+    hasSystemPrompt: !!message.systemPrompt,
+    sessionId: message.sessionId,
+    resume: !!message.resume,
+  });
+
+  // Verify API key is set (set via setEnvVars() by the Worker)
+  if (!process.env.ANTHROPIC_API_KEY) {
+    logger.error("ANTHROPIC_API_KEY not set");
+    sendMessage(
+      ws,
+      {
+        type: "error",
+        message: "ANTHROPIC_API_KEY not set in environment",
+      },
+      logger,
+    );
+    return;
+  }
+
+  logger.info("API key present, starting query");
+
+  // Check if session data exists on disk before attempting to resume
+  const sessionExists = message.sessionId
+    ? await checkSessionExists(message.sessionId, execFn, logger)
+    : false;
+  logger.info("Session check", { sessionId: message.sessionId, exists: sessionExists });
+
+  // Store session info
+  sessions.set(ws, {
+    sessionId: message.sessionId ?? null,
+  });
+
+  // Create infinite prompt generator for this WebSocket
+  // This generator stays alive until the WebSocket closes
+  const promptGenerator = sessionQueue.consume(ws);
+
+  // Start Claude query with session-id for persistence
+  // - extraArgs: { "session-id": ... } sets the session ID for new sessions
+  // - resume: sessionId restores existing session state from disk
+  const claudeQuery = query({
+    prompt: promptGenerator,
+    options: {
+      model,
+      systemPrompt: message.systemPrompt,
+      extraArgs:
+        !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
+      resume: sessionExists ? message.sessionId : undefined,
+    },
+  });
+
+  // Process messages in background with error handling
+  // This loop runs until the WebSocket closes or an error occurs
+  processClaudeMessages(ws, claudeQuery, message.sessionId ?? null, logger, syncSession).catch(
+    (error) => {
+      logger.error("Claude processing error", error instanceof Error ? error.stack : error);
+      sendMessage(ws, { type: "error", message: "Claude processing failed" }, logger);
+    },
+  );
+
+  // Send initial message if provided
+  if (message.content) {
+    sessionQueue.enqueue(ws, createUserMessage(message.content));
+  }
+}
+
+/**
+ * Handle user message
+ */
+export function handleUserMessage(
+  ws: WebSocket,
+  message: IncomingMessage,
+  deps: MessageHandlerDeps,
+): void {
+  const { sessions, sessionQueue, logger } = deps;
+
+  logger.info("Received user message", { contentLength: message.content?.length ?? 0 });
+
+  const session = sessions.get(ws);
+  if (!session) {
+    logger.error("Session not initialized for user message");
+    sendMessage(ws, { type: "error", message: "Session not initialized" }, logger);
+    return;
+  }
+
+  if (message.content) {
+    logger.info("Pushing message to Claude queue");
+    sessionQueue.enqueue(ws, createUserMessage(message.content));
+  }
+}
+
+/**
+ * Handle close message
+ */
+export function handleClose(
+  ws: WebSocket,
+  deps: Pick<MessageHandlerDeps, "sessions" | "sessionQueue">,
+): void {
+  deps.sessionQueue.cleanup(ws);
+  deps.sessions.delete(ws);
+}
+
+/**
+ * Handle incoming WebSocket message
+ */
+export async function handleMessage(
+  data: RawData,
+  ws: WebSocket,
+  deps: MessageHandlerDeps,
+): Promise<void> {
+  const { logger } = deps;
+
+  try {
+    const raw = data.toString();
+    logger.info(`IN: ${raw}`);
+    const message = JSON.parse(raw) as IncomingMessage;
+
+    switch (message.type) {
+      case "start":
+        await handleStart(ws, message, deps);
+        break;
+      case "message":
+        handleUserMessage(ws, message, deps);
+        break;
+      case "close":
+        handleClose(ws, deps);
+        ws.close();
+        break;
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Invalid message";
+    sendMessage(ws, { type: "error", message: errorMessage }, logger);
+  }
+}
+
+/**
+ * Handle WebSocket connection
+ */
+export function handleConnection(ws: WebSocket, deps: MessageHandlerDeps): void {
+  const { logger } = deps;
+
+  logger.info("Client connected");
+
+  ws.on("message", (data: RawData) => {
+    handleMessage(data, ws, deps).catch((error) => {
+      logger.error("Message handler error", error instanceof Error ? error.message : error);
+      sendMessage(ws, { type: "error", message: "Internal server error" }, logger);
+    });
+  });
+
+  ws.on("close", () => {
+    logger.info("Client disconnected");
+    handleClose(ws, deps);
+  });
+
+  ws.on("error", (error: Error) => {
+    logger.error("WebSocket error", error.message);
+  });
+}
