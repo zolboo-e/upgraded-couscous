@@ -1,5 +1,5 @@
 import { jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { sessions } from "./sessions";
+import { sessions } from "./sessions.js";
 
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 
