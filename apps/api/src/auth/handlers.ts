@@ -7,10 +7,12 @@ import type { LoginRequest, RegisterRequest } from "./types/request.types.js";
 const SESSION_COOKIE_NAME = "session";
 
 function getCookieOptions(expiresAt?: Date) {
+  const isProduction = env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "strict" as const,
+    secure: isProduction,
+    // Use "none" for cross-origin (API/web on different domains), requires secure=true
+    sameSite: isProduction ? ("none" as const) : ("lax" as const),
     path: "/",
     ...(expiresAt && { expires: expiresAt }),
   };
