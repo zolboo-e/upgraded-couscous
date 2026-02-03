@@ -172,6 +172,13 @@ export class SessionDO extends DurableObject<Env> {
       this.containerWs.addEventListener("error", (event) => {
         console.error("[SessionDO] Container WebSocket error:", event);
       });
+
+      // Keep DO alive while container is connected (prevents hibernation from dropping messages)
+      const containerLifecycle = new Promise<void>((resolve) => {
+        this.containerWs?.addEventListener("close", () => resolve());
+        this.containerWs?.addEventListener("error", () => resolve());
+      });
+      this.ctx.waitUntil(containerLifecycle);
     } catch (error) {
       console.error("[SessionDO] Failed to start container:", error);
       // Send error to browser

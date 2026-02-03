@@ -135,6 +135,14 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
       ws.addEventListener("open", () => {
         setServerStatus("connected");
+        // Initialize container with session info
+        ws.send(
+          JSON.stringify({
+            type: "start",
+            sessionId,
+            systemPrompt: session?.systemPrompt,
+          }),
+        );
       });
 
       ws.addEventListener("message", handleMessage);
@@ -252,7 +260,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
       setServerStatus("disconnected");
       setAgentStatus("unknown");
     };
-  }, [sessionId, isAuthenticated, isLoading, error]);
+  }, [sessionId, isAuthenticated, isLoading, error, session]);
 
   const handleSendMessage = (content: string): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
