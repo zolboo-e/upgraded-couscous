@@ -2,6 +2,7 @@ import { type JWTPayload, jwtVerify, SignJWT } from "jose";
 import { env } from "../../config/env.js";
 
 const SESSION_DURATION = "7d";
+const WS_TOKEN_DURATION = "5m"; // Short-lived token for WebSocket connections
 
 export interface JWTUserPayload extends JWTPayload {
   userId: string;
@@ -47,4 +48,24 @@ export async function verifyJWT(token: string): Promise<JWTUserPayload | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Generate a short-lived token for WebSocket connections
+ * This token can be passed as a query param since browsers can't set headers on WebSocket
+ */
+export async function generateWsToken(payload: {
+  userId: string;
+  email: string;
+  name: string | null;
+}): Promise<string> {
+  return new SignJWT({
+    userId: payload.userId,
+    email: payload.email,
+    name: payload.name,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(WS_TOKEN_DURATION)
+    .sign(getSecretKey());
 }

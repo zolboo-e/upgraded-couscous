@@ -18,6 +18,7 @@ export function createAuthRoutes(handlers: AuthHandlers, authService: AuthServic
 
   protectedRoutes.post("/logout", handlers.logout);
   protectedRoutes.get("/me", handlers.me);
+  protectedRoutes.get("/ws-token", handlers.wsToken);
 
   auth.route("/", protectedRoutes);
 

@@ -6,12 +6,6 @@
   "observability": {
     "enabled": true
   },
-  // Environment variables for SessionDO (set actual values via wrangler secret)
-  "vars": {
-    "JWT_SECRET": "",
-    "API_BASE_URL": "",
-    "INTERNAL_API_TOKEN": ""
-  },
   "containers": [
     {
       "class_name": "Sandbox",

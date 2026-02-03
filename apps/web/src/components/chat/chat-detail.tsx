@@ -8,6 +8,8 @@ import {
   type ChatMessage as ChatMessageType,
   type ChatSessionWithMessages,
   getChatSession,
+  getWsToken,
+  SANDBOX_WS_URL,
   WS_BASE_URL,
 } from "@/lib/api/chat";
 import {
@@ -115,15 +117,42 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
       return;
     }
 
-    const ws = new WebSocket(`${WS_BASE_URL}/chat/sessions/${sessionId}/ws`);
-    wsRef.current = ws;
-    setWebApiStatus("connecting");
+    const connectWebSocket = async (): Promise<void> => {
+      let wsUrl: string;
 
-    ws.addEventListener("open", () => {
-      setWebApiStatus("connected");
-    });
+      // Use sandbox direct connection if configured
+      if (SANDBOX_WS_URL) {
+        const token = await getWsToken();
+        if (!token) {
+          setError("Failed to get WebSocket token");
+          return;
+        }
+        wsUrl = `${SANDBOX_WS_URL}/ws/v2?sessionId=${sessionId}&token=${token}`;
+      } else {
+        // Fallback to API WebSocket
+        wsUrl = `${WS_BASE_URL}/chat/sessions/${sessionId}/ws`;
+      }
 
-    ws.addEventListener("message", (event: MessageEvent) => {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      setWebApiStatus("connecting");
+
+      ws.addEventListener("open", () => {
+        setWebApiStatus("connected");
+      });
+
+      ws.addEventListener("message", handleMessage);
+
+      ws.addEventListener("close", () => {
+        setWebApiStatus("disconnected");
+      });
+
+      ws.addEventListener("error", () => {
+        setWebApiStatus("disconnected");
+      });
+    };
+
+    const handleMessage = (event: MessageEvent): void => {
       const chunk: StreamChunk = JSON.parse(event.data as string);
 
       switch (chunk.type) {
@@ -167,7 +196,6 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
         case "tool_permission_request":
           if (chunk.requestId && chunk.toolName && chunk.toolInput) {
-            // Add permission request message to chat history
             const permissionRequestMessage: ChatMessageType = {
               id: crypto.randomUUID(),
               sessionId,
@@ -181,8 +209,6 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
               createdAt: new Date().toISOString(),
             };
             setMessages((prev) => [...prev, permissionRequestMessage]);
-
-            // Show permission dialog
             setPendingPermission({
               requestId: chunk.requestId,
               toolName: chunk.toolName,
@@ -193,7 +219,6 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
         case "ask_user_question":
           if (chunk.requestId && chunk.questions) {
-            // Add question message to chat history
             const questionMessage: ChatMessageType = {
               id: crypto.randomUUID(),
               sessionId,
@@ -206,8 +231,6 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
               createdAt: new Date().toISOString(),
             };
             setMessages((prev) => [...prev, questionMessage]);
-
-            // Show question dialog
             setPendingQuestion({
               requestId: chunk.requestId,
               questions: chunk.questions,
@@ -221,22 +244,15 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
           }
           break;
       }
-    });
+    };
 
-    ws.addEventListener("error", () => {
-      setWebApiStatus("disconnected");
-      setError("WebSocket connection error");
-    });
-
-    ws.addEventListener("close", () => {
-      setWebApiStatus("disconnected");
-      setApiSandboxStatus("unknown");
-      wsRef.current = null;
-    });
+    connectWebSocket();
 
     return () => {
-      ws.close();
-      wsRef.current = null;
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       setWebApiStatus("disconnected");
       setApiSandboxStatus("unknown");
     };

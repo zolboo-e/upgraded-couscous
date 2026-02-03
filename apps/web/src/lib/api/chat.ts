@@ -1,6 +1,32 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+// Sandbox WebSocket URL for direct connection (bypasses API)
+export const SANDBOX_WS_URL = process.env.NEXT_PUBLIC_SANDBOX_WS_URL;
+
+// Legacy: API WebSocket URL (fallback if sandbox URL not configured)
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
+
+/**
+ * Get a short-lived WebSocket token for connecting to sandbox
+ * This is needed because browsers can't set Authorization headers on WebSocket
+ */
+export async function getWsToken(): Promise<string | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/ws-token`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.data.token;
+  } catch {
+    return null;
+  }
+}
 
 export interface ChatSession {
   id: string;

@@ -32,7 +32,7 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTUserP
 }
 
 /**
- * Extract JWT token from Authorization header or cookie
+ * Extract JWT token from Authorization header, cookie, or query param
  */
 export function extractToken(request: Request): string | null {
   // Try Authorization header first (Bearer token)
@@ -48,6 +48,13 @@ export function extractToken(request: Request): string | null {
     if (sessionCookie) {
       return sessionCookie.split("=")[1]?.trim() ?? null;
     }
+  }
+
+  // Try query param (for WebSocket connections from browsers)
+  const url = new URL(request.url);
+  const tokenParam = url.searchParams.get("token");
+  if (tokenParam) {
+    return tokenParam;
   }
 
   return null;
