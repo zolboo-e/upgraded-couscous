@@ -117,6 +117,13 @@ export class SessionDO extends DurableObject<Env> {
 
     console.log("[SessionDO] Starting container for session:", sessionId);
 
+    // Send connecting status to browser
+    if (this.browserWs?.readyState === WebSocket.OPEN) {
+      this.browserWs.send(
+        JSON.stringify({ type: "connection_status", sandboxStatus: "connecting" }),
+      );
+    }
+
     try {
       // Get sandbox instance
       this.sandbox = getSandbox(this.env.Sandbox, sessionId, {
@@ -156,6 +163,12 @@ export class SessionDO extends DurableObject<Env> {
 
       this.containerWs.addEventListener("open", () => {
         console.log("[SessionDO] Connected to container WebSocket");
+        // Send connected status to browser
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(
+            JSON.stringify({ type: "connection_status", sandboxStatus: "connected" }),
+          );
+        }
         // Forward start message to container
         this.containerWs?.send(JSON.stringify(data));
       });
@@ -166,6 +179,12 @@ export class SessionDO extends DurableObject<Env> {
 
       this.containerWs.addEventListener("close", () => {
         console.log("[SessionDO] Container WebSocket closed");
+        // Send disconnected status to browser
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(
+            JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }),
+          );
+        }
         this.containerWs = null;
       });
 
@@ -183,6 +202,9 @@ export class SessionDO extends DurableObject<Env> {
       console.error("[SessionDO] Failed to start container:", error);
       // Send error to browser
       if (this.browserWs?.readyState === WebSocket.OPEN) {
+        this.browserWs.send(
+          JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }),
+        );
         this.browserWs.send(
           JSON.stringify({
             type: "error",
