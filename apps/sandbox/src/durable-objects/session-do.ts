@@ -437,13 +437,37 @@ export class SessionDO extends DurableObject<Env> {
       const syncStatus = await syncSessionToR2(this.sandbox, this.sessionId);
       console.log("[SessionDO] Session sync status:", syncStatus);
 
-      const statusMap: Record<string, string> = {
-        SYNCED: "synced",
-        NO_LOCAL_DATA: "sync_skipped",
-        SYNC_RSYNC_FAILED: "sync_failed",
-        SYNC_VERIFY_FAILED: "sync_failed",
-      };
-      this.sendSessionStatus(statusMap[syncStatus] ?? syncStatus);
+      if (syncStatus === "SYNCED") {
+        // Run filesystem sync separately to flush to R2
+        this.sendSessionStatus("flushing");
+        const flushResult = await this.sandbox.exec("sync");
+        console.log("[SessionDO] Filesystem flush result:", {
+          stdout: flushResult.stdout,
+          stderr: flushResult.stderr,
+        });
+
+        // Send detailed result to browser
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(
+            JSON.stringify({
+              type: "session_status",
+              status: "synced",
+              details: {
+                rsyncStatus: syncStatus,
+                flushStdout: flushResult.stdout,
+                flushStderr: flushResult.stderr,
+              },
+            }),
+          );
+        }
+      } else {
+        const statusMap: Record<string, string> = {
+          NO_LOCAL_DATA: "sync_skipped",
+          SYNC_RSYNC_FAILED: "sync_failed",
+          SYNC_VERIFY_FAILED: "sync_failed",
+        };
+        this.sendSessionStatus(statusMap[syncStatus] ?? syncStatus);
+      }
     } catch (error) {
       console.error("[SessionDO] Failed to sync session to R2:", error);
       this.sendSessionStatus("sync_failed");

@@ -184,8 +184,6 @@ export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Prom
 			echo "Syncing to R2..." >> $LOG
 			mkdir -p "$PERSISTENT_DIR"
 			if rsync -av "$LOCAL_DIR/" "$PERSISTENT_DIR/" >> $LOG 2>&1; then
-				# Force flush to R2 (s3fs-fuse buffers writes)
-				sync
 				if [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
 					echo "SYNCED" | tee -a $LOG
 				else
