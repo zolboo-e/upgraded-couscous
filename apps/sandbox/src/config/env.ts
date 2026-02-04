@@ -39,7 +39,7 @@ export const CONTAINER_CONFIG = {
  * Sandbox default options
  */
 export const SANDBOX_CONFIG = {
-  sleepAfter: "10m",
+  sleepAfter: "1m",
 } as const;
 
 /**

@@ -20,6 +20,7 @@ import {
 import { ChatInput } from "./chat-input";
 import { ChatMessage, StreamingMessage } from "./chat-message";
 import { type AgentStatus, ConnectionStatusBar, type ServerStatus } from "./connection-status-bar";
+import { ErrorOverlay } from "./error-overlay";
 import type { SessionRestoreStatusValue } from "./session-restore-status";
 import {
   ToolPermissionDialog,
@@ -465,16 +466,9 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <div className="rounded-md bg-destructive/10 p-4 text-destructive">{error}</div>
-        <Link href="/chats" className="text-sm text-primary hover:underline">
-          Back to chats
-        </Link>
-      </div>
-    );
-  }
+  const clearError = (): void => {
+    setError(null);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -517,6 +511,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
       {pendingQuestion && (
         <AskUserQuestion request={pendingQuestion} onAnswer={handleQuestionAnswer} />
       )}
+
+      {error && <ErrorOverlay message={error} onDismiss={clearError} />}
     </div>
   );
 }
