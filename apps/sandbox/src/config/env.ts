@@ -32,7 +32,7 @@ export const CONTAINER_CONFIG = {
   port: 8080,
   healthPath: "/health",
   startTimeout: 30000,
-  entrypoint: "bun /workspace/dist/index.js",
+  entrypoint: "node /workspace/dist/index.js",
 } as const;
 
 /**

@@ -177,19 +177,38 @@ export class SessionDO extends DurableObject<Env> {
         await this.handleContainerMessage(event.data as string);
       });
 
-      this.containerWs.addEventListener("close", () => {
-        console.log("[SessionDO] Container WebSocket closed");
-        // Send disconnected status to browser
+      this.containerWs.addEventListener("close", (event: CloseEvent) => {
+        console.log("[SessionDO] Container WebSocket closed", {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
+        // Send disconnected status to browser with details
         if (this.browserWs?.readyState === WebSocket.OPEN) {
           this.browserWs.send(
             JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }),
           );
+          // Send close reason if available
+          if (event.code !== 1000 || event.reason) {
+            this.browserWs.send(
+              JSON.stringify({
+                type: "error",
+                message: `Container closed: code=${event.code}, reason=${event.reason || "none"}`,
+              }),
+            );
+          }
         }
         this.containerWs = null;
       });
 
       this.containerWs.addEventListener("error", (event) => {
         console.error("[SessionDO] Container WebSocket error:", event);
+        // Send error to browser
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(
+            JSON.stringify({ type: "error", message: "Container WebSocket connection error" }),
+          );
+        }
       });
 
       // Keep DO alive while container is connected (prevents hibernation from dropping messages)
