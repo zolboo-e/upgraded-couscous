@@ -24,9 +24,7 @@ export class SessionDO extends DurableObject<Env> {
   /**
    * Send session status to browser for UI display
    */
-  private sendSessionStatus(
-    status: "restore_started" | "restoring" | "restored" | "restore_skipped" | "restore_failed",
-  ): void {
+  private sendSessionStatus(status: string): void {
     if (this.browserWs?.readyState === WebSocket.OPEN) {
       this.browserWs.send(JSON.stringify({ type: "session_status", status }));
     }
@@ -161,13 +159,13 @@ export class SessionDO extends DurableObject<Env> {
           console.log("[SessionDO] Session restore status:", restoreStatus);
 
           // Map RestoreStatus to user-friendly status
-          const statusMap = {
+          const statusMap: Record<string, string> = {
             RESTORED: "restored",
             NO_R2_DATA: "restore_skipped",
             RESTORE_RSYNC_FAILED: "restore_failed",
             RESTORE_VERIFY_FAILED: "restore_failed",
-          } as const;
-          this.sendSessionStatus(statusMap[restoreStatus]);
+          };
+          this.sendSessionStatus(statusMap[restoreStatus] ?? restoreStatus);
         } else {
           console.warn("[SessionDO] R2 mount failed:", mountResult);
           this.sendSessionStatus("restore_failed");
