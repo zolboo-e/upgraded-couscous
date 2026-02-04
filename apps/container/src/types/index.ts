@@ -22,7 +22,8 @@ export type OutgoingMessage =
   | { type: "sdk_message"; message: SDKMessage }
   | { type: "chunk"; content: string }
   | { type: "done"; metadata?: { tokensUsed?: number; stopReason?: string } }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "memory_stats"; heapUsed: number; heapTotal: number; rss: number; external: number };
 
 /**
  * State tracked for each WebSocket session

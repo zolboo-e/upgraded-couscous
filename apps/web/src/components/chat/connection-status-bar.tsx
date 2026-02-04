@@ -1,5 +1,6 @@
 "use client";
 
+import type { MemoryStats } from "./chat-detail";
 import { ConnectionStatus, type ConnectionStatusValue } from "./connection-status";
 import { SessionRestoreStatus, type SessionRestoreStatusValue } from "./session-restore-status";
 
@@ -15,12 +16,14 @@ interface ConnectionStatusBarProps {
   serverStatus: ServerStatus;
   agentStatus: AgentStatus;
   sessionRestoreStatus: SessionRestoreStatusValue;
+  memoryStats: MemoryStats | null;
 }
 
 export function ConnectionStatusBar({
   serverStatus,
   agentStatus,
   sessionRestoreStatus,
+  memoryStats,
 }: ConnectionStatusBarProps): React.ReactElement {
   return (
     <div className="flex items-center gap-4 text-sm">
@@ -36,6 +39,12 @@ export function ConnectionStatusBar({
         <span className="text-muted-foreground">Session:</span>
         <SessionRestoreStatus status={sessionRestoreStatus} showLabel={false} />
       </div>
+      {memoryStats && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Memory:</span>
+          <span className="font-mono">{memoryStats.rss}MB</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -58,6 +58,16 @@ interface SDKMessagePayload {
 }
 
 /**
+ * Memory stats from container
+ */
+export interface MemoryStats {
+  heapUsed: number;
+  heapTotal: number;
+  rss: number;
+  external: number;
+}
+
+/**
  * Raw WebSocket chunk from server - uses 'message' for both SDK payloads and error strings
  */
 interface RawStreamChunk {
@@ -77,6 +87,11 @@ interface RawStreamChunk {
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
   // Session status field
   status?: SessionRestoreStatusValue;
+  // Memory stats fields
+  heapUsed?: number;
+  heapTotal?: number;
+  rss?: number;
+  external?: number;
 }
 
 /**
@@ -93,7 +108,8 @@ interface StreamChunk {
     | "ask_user_question"
     | "connection_status"
     | "sdk_message"
-    | "session_status";
+    | "session_status"
+    | "memory_stats";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -115,6 +131,8 @@ interface StreamChunk {
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
   // Session restore status
   sessionStatus?: SessionRestoreStatusValue;
+  // Memory stats
+  memoryStats?: MemoryStats;
 }
 
 function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
@@ -137,6 +155,13 @@ function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
     chunk.errorMessage = raw.message;
   } else if (raw.type === "session_status" && raw.status) {
     chunk.sessionStatus = raw.status;
+  } else if (raw.type === "memory_stats" && raw.heapUsed !== undefined) {
+    chunk.memoryStats = {
+      heapUsed: raw.heapUsed,
+      heapTotal: raw.heapTotal ?? 0,
+      rss: raw.rss ?? 0,
+      external: raw.external ?? 0,
+    };
   }
 
   return chunk;
@@ -162,6 +187,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("unknown");
   const [sessionRestoreStatus, setSessionRestoreStatus] =
     useState<SessionRestoreStatusValue>("unknown");
+  const [memoryStats, setMemoryStats] = useState<MemoryStats | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -366,6 +392,12 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             setSessionRestoreStatus(chunk.sessionStatus);
           }
           break;
+
+        case "memory_stats":
+          if (chunk.memoryStats) {
+            setMemoryStats(chunk.memoryStats);
+          }
+          break;
       }
     };
 
@@ -484,6 +516,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             serverStatus={serverStatus}
             agentStatus={agentStatus}
             sessionRestoreStatus={sessionRestoreStatus}
+            memoryStats={memoryStats}
           />
         </div>
       </div>
