@@ -290,6 +290,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
           }
           streamingContentRef.current = "";
           setStreamingContent("");
+          setIsStreaming(false);
           break;
 
         case "error":
