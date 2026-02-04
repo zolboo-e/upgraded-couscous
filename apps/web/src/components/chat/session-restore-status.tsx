@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 export type SessionRestoreStatusValue =
+  | "unknown"
   | "restore_started"
   | "restoring"
   | "restored"
@@ -14,6 +15,7 @@ export type SessionRestoreStatusValue =
 const statusVariants = cva("inline-flex items-center gap-1.5 text-xs font-medium", {
   variants: {
     status: {
+      unknown: "text-gray-500",
       restore_started: "text-yellow-600",
       restoring: "text-yellow-600",
       restored: "text-green-600",
@@ -22,13 +24,14 @@ const statusVariants = cva("inline-flex items-center gap-1.5 text-xs font-medium
     },
   },
   defaultVariants: {
-    status: "restore_started",
+    status: "unknown",
   },
 });
 
 const dotVariants = cva("h-2 w-2 rounded-full", {
   variants: {
     status: {
+      unknown: "bg-gray-400",
       restore_started: "bg-yellow-500 animate-pulse",
       restoring: "bg-yellow-500 animate-pulse",
       restored: "bg-green-500",
@@ -37,7 +40,7 @@ const dotVariants = cva("h-2 w-2 rounded-full", {
     },
   },
   defaultVariants: {
-    status: "restore_started",
+    status: "unknown",
   },
 });
 
@@ -49,6 +52,7 @@ export interface SessionRestoreStatusProps
 }
 
 const statusLabels: Record<SessionRestoreStatusValue, string> = {
+  unknown: "Unknown",
   restore_started: "Starting...",
   restoring: "Restoring...",
   restored: "Restored",

@@ -160,7 +160,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   const [serverStatus, setServerStatus] = useState<ServerStatus>("disconnected");
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("unknown");
   const [sessionRestoreStatus, setSessionRestoreStatus] =
-    useState<SessionRestoreStatusValue | null>(null);
+    useState<SessionRestoreStatusValue>("unknown");
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);

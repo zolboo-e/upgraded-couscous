@@ -14,7 +14,7 @@ export type AgentStatus =
 interface ConnectionStatusBarProps {
   serverStatus: ServerStatus;
   agentStatus: AgentStatus;
-  sessionRestoreStatus?: SessionRestoreStatusValue | null;
+  sessionRestoreStatus: SessionRestoreStatusValue;
 }
 
 export function ConnectionStatusBar({
@@ -32,12 +32,10 @@ export function ConnectionStatusBar({
         <span className="text-muted-foreground">Agent:</span>
         <ConnectionStatus status={agentStatus as ConnectionStatusValue} showLabel={false} />
       </div>
-      {sessionRestoreStatus && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Session:</span>
-          <SessionRestoreStatus status={sessionRestoreStatus} showLabel={false} />
-        </div>
-      )}
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground">Session:</span>
+        <SessionRestoreStatus status={sessionRestoreStatus} showLabel={false} />
+      </div>
     </div>
   );
 }
