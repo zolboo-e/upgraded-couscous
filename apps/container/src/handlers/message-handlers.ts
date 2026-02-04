@@ -1,6 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { RawData, WebSocket } from "ws";
-import { startMemoryMonitor, stopMemoryMonitor } from "../services/index.js";
 import {
   checkSessionExists,
   createUserMessage,
@@ -9,9 +8,6 @@ import {
 import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 import { processClaudeMessages } from "./claude-processor.js";
-
-// Track memory monitor timers per WebSocket
-const memoryMonitorTimers = new Map<WebSocket, NodeJS.Timeout>();
 
 export interface MessageHandlerDeps extends HandlerDependencies {
   sessionQueue: SessionMessageQueue;
@@ -90,10 +86,6 @@ export async function handleStart(
     },
   );
 
-  // Start memory monitoring
-  const memoryTimer = startMemoryMonitor(ws);
-  memoryMonitorTimers.set(ws, memoryTimer);
-
   // Send initial message if provided
   if (message.content) {
     sessionQueue.enqueue(ws, createUserMessage(message.content, message.sessionId ?? ""));
@@ -132,13 +124,6 @@ export function handleClose(
   ws: WebSocket,
   deps: Pick<MessageHandlerDeps, "sessions" | "sessionQueue">,
 ): void {
-  // Stop memory monitoring
-  const memoryTimer = memoryMonitorTimers.get(ws);
-  if (memoryTimer) {
-    stopMemoryMonitor(memoryTimer);
-    memoryMonitorTimers.delete(ws);
-  }
-
   deps.sessionQueue.cleanup(ws);
   deps.sessions.delete(ws);
 }
