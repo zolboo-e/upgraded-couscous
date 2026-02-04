@@ -9,7 +9,8 @@ export async function isR2Mounted(sandbox: Sandbox): Promise<boolean> {
   const result = await sandbox.exec(
     `mountpoint -q ${R2_CONFIG.mountPath} && echo 'MOUNTED' || echo 'NOT_MOUNTED'`,
   );
-  return result.stdout.includes("MOUNTED");
+  // Use exact match to avoid "NOT_MOUNTED" matching "MOUNTED"
+  return result.stdout.trim() === "MOUNTED";
 }
 
 /**
@@ -125,18 +126,40 @@ export async function restoreSessionFromR2(
 		ls -la "$LOCAL_DIR" >> $LOG 2>&1
 		echo "" >> $LOG
 
-		# Always sync from R2 if data exists (rsync efficiently skips unchanged files)
+		# Restore only projects and todos folders from R2
 		mkdir -p "$LOCAL_DIR"
-		if [ -d "$PERSISTENT_DIR" ] && [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
-			echo "Syncing from R2..." >> $LOG
-			if rsync -av "$PERSISTENT_DIR/" "$LOCAL_DIR/" >> $LOG 2>&1; then
-				if [ -n "$(ls -A $LOCAL_DIR 2>/dev/null)" ]; then
-					echo "RESTORED" | tee -a $LOG
-				else
-					echo "RESTORE_VERIFY_FAILED" | tee -a $LOG
-				fi
+		RESTORED_SOMETHING=false
+
+		# Restore projects folder if it exists in R2
+		if [ -d "$PERSISTENT_DIR/projects" ] && [ -n "$(ls -A $PERSISTENT_DIR/projects 2>/dev/null)" ]; then
+			echo "Restoring projects folder..." >> $LOG
+			mkdir -p "$LOCAL_DIR/projects"
+			if rsync -av "$PERSISTENT_DIR/projects/" "$LOCAL_DIR/projects/" >> $LOG 2>&1; then
+				RESTORED_SOMETHING=true
 			else
 				echo "RESTORE_RSYNC_FAILED" | tee -a $LOG
+				exit 0
+			fi
+		fi
+
+		# Restore todos folder if it exists in R2
+		if [ -d "$PERSISTENT_DIR/todos" ] && [ -n "$(ls -A $PERSISTENT_DIR/todos 2>/dev/null)" ]; then
+			echo "Restoring todos folder..." >> $LOG
+			mkdir -p "$LOCAL_DIR/todos"
+			if rsync -av "$PERSISTENT_DIR/todos/" "$LOCAL_DIR/todos/" >> $LOG 2>&1; then
+				RESTORED_SOMETHING=true
+			else
+				echo "RESTORE_RSYNC_FAILED" | tee -a $LOG
+				exit 0
+			fi
+		fi
+
+		# Determine final status
+		if [ "$RESTORED_SOMETHING" = true ]; then
+			if [ -n "$(ls -A $LOCAL_DIR 2>/dev/null)" ]; then
+				echo "RESTORED" | tee -a $LOG
+			else
+				echo "RESTORE_VERIFY_FAILED" | tee -a $LOG
 			fi
 		else
 			echo "NO_R2_DATA" | tee -a $LOG
@@ -145,7 +168,7 @@ export async function restoreSessionFromR2(
 		echo "" >> $LOG
 		echo "=== Final state ===" >> $LOG
 		echo "Local:" >> $LOG
-		ls -la "$LOCAL_DIR" >> $LOG 2>&1
+		ls -laR "$LOCAL_DIR" >> $LOG 2>&1
 	`;
 
   const result = await sandbox.exec(script);
@@ -179,18 +202,39 @@ export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Prom
 		ls -la "$LOCAL_DIR" 2>&1 >> $LOG
 		echo "" >> $LOG
 
-		# Sync from local to R2 if local data exists
-		if [ -d "$LOCAL_DIR" ] && [ -n "$(ls -A $LOCAL_DIR 2>/dev/null)" ]; then
-			echo "Syncing to R2..." >> $LOG
-			mkdir -p "$PERSISTENT_DIR"
-			if rsync -av "$LOCAL_DIR/" "$PERSISTENT_DIR/" >> $LOG 2>&1; then
-				if [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
-					echo "SYNCED" | tee -a $LOG
-				else
-					echo "SYNC_VERIFY_FAILED" | tee -a $LOG
-				fi
+		# Sync only projects and todos folders to R2
+		SYNCED_SOMETHING=false
+
+		# Sync projects folder if it exists
+		if [ -d "$LOCAL_DIR/projects" ] && [ -n "$(ls -A $LOCAL_DIR/projects 2>/dev/null)" ]; then
+			echo "Syncing projects folder..." >> $LOG
+			mkdir -p "$PERSISTENT_DIR/projects"
+			if rsync -av "$LOCAL_DIR/projects/" "$PERSISTENT_DIR/projects/" >> $LOG 2>&1; then
+				SYNCED_SOMETHING=true
 			else
 				echo "SYNC_RSYNC_FAILED" | tee -a $LOG
+				exit 0
+			fi
+		fi
+
+		# Sync todos folder if it exists
+		if [ -d "$LOCAL_DIR/todos" ] && [ -n "$(ls -A $LOCAL_DIR/todos 2>/dev/null)" ]; then
+			echo "Syncing todos folder..." >> $LOG
+			mkdir -p "$PERSISTENT_DIR/todos"
+			if rsync -av "$LOCAL_DIR/todos/" "$PERSISTENT_DIR/todos/" >> $LOG 2>&1; then
+				SYNCED_SOMETHING=true
+			else
+				echo "SYNC_RSYNC_FAILED" | tee -a $LOG
+				exit 0
+			fi
+		fi
+
+		# Determine final status
+		if [ "$SYNCED_SOMETHING" = true ]; then
+			if [ -d "$PERSISTENT_DIR" ] && [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
+				echo "SYNCED" | tee -a $LOG
+			else
+				echo "SYNC_VERIFY_FAILED" | tee -a $LOG
 			fi
 		else
 			echo "NO_LOCAL_DATA" | tee -a $LOG
@@ -199,7 +243,7 @@ export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Prom
 		echo "" >> $LOG
 		echo "=== Final state ===" >> $LOG
 		echo "Persistent:" >> $LOG
-		ls -la "$PERSISTENT_DIR" 2>&1 >> $LOG
+		ls -laR "$PERSISTENT_DIR" 2>&1 >> $LOG
 	`;
 
   const result = await sandbox.exec(script);
@@ -208,13 +252,16 @@ export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Prom
 
 /**
  * Get the paths for session file operations
+ * Note: Only projects and todos folders are synced to R2
  */
 export function getSessionPaths(sessionId: string): {
-  persistentPath: string;
-  localPath: string;
+  persistentBase: string;
+  localBase: string;
+  syncedFolders: string[];
 } {
   return {
-    persistentPath: `${R2_CONFIG.mountPath}/${sessionId}/.claude/projects/-workspace`,
-    localPath: "/root/.claude/projects/-workspace",
+    persistentBase: `${R2_CONFIG.mountPath}/${sessionId}/.claude`,
+    localBase: "/root/.claude",
+    syncedFolders: ["projects", "todos"],
   };
 }

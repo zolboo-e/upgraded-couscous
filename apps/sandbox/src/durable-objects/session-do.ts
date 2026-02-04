@@ -440,11 +440,11 @@ export class SessionDO extends DurableObject<Env> {
       if (syncStatus === "SYNCED") {
         // Run filesystem sync separately to flush to R2
         this.sendSessionStatus("flushing");
-        const flushResult = await this.sandbox.exec("sync");
-        console.log("[SessionDO] Filesystem flush result:", {
-          stdout: flushResult.stdout,
-          stderr: flushResult.stderr,
-        });
+        // const flushResult = await this.sandbox.exec("sync");
+        // console.log("[SessionDO] Filesystem flush result:", {
+        //   stdout: flushResult.stdout,
+        //   stderr: flushResult.stderr,
+        // });
 
         // Send detailed result to browser
         if (this.browserWs?.readyState === WebSocket.OPEN) {
@@ -454,8 +454,8 @@ export class SessionDO extends DurableObject<Env> {
               status: "synced",
               details: {
                 rsyncStatus: syncStatus,
-                flushStdout: flushResult.stdout,
-                flushStderr: flushResult.stderr,
+                // flushStdout: flushResult.stdout,
+                // flushStderr: flushResult.stderr,
               },
             }),
           );
