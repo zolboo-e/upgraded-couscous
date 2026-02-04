@@ -156,22 +156,40 @@ export class SessionDO extends DurableObject<Env> {
         path: CONTAINER_CONFIG.healthPath,
       });
 
-      console.log("[SessionDO] Container ready, connecting WebSocket");
+      console.log("[SessionDO] Container ready, connecting via wsConnect");
 
-      // Connect to container WebSocket as client
-      this.containerWs = new WebSocket(`ws://127.0.0.1:${CONTAINER_CONFIG.port}`);
-
-      this.containerWs.addEventListener("open", () => {
-        console.log("[SessionDO] Connected to container WebSocket");
-        // Send connected status to browser
-        if (this.browserWs?.readyState === WebSocket.OPEN) {
-          this.browserWs.send(
-            JSON.stringify({ type: "connection_status", sandboxStatus: "connected" }),
-          );
-        }
-        // Forward start message to container
-        this.containerWs?.send(JSON.stringify(data));
+      // Create synthetic WebSocket upgrade request
+      const wsUpgradeRequest = new Request("https://internal/ws", {
+        headers: {
+          Upgrade: "websocket",
+          Connection: "Upgrade",
+        },
       });
+
+      // Connect through Sandbox SDK routing layer (not localhost TCP)
+      const wsResponse = await this.sandbox.wsConnect(wsUpgradeRequest, CONTAINER_CONFIG.port);
+
+      // Get WebSocket from response
+      const ws = wsResponse.webSocket;
+      if (!ws) {
+        throw new Error("Container didn't accept WebSocket connection");
+      }
+
+      // Accept the WebSocket to handle it in this DO
+      ws.accept();
+      this.containerWs = ws;
+
+      console.log("[SessionDO] Connected to container WebSocket");
+
+      // Send connected status to browser
+      if (this.browserWs?.readyState === WebSocket.OPEN) {
+        this.browserWs.send(
+          JSON.stringify({ type: "connection_status", sandboxStatus: "connected" }),
+        );
+      }
+
+      // Forward start message to container
+      this.containerWs.send(JSON.stringify(data));
 
       this.containerWs.addEventListener("message", async (event) => {
         await this.handleContainerMessage(event.data as string);
@@ -201,12 +219,25 @@ export class SessionDO extends DurableObject<Env> {
         this.containerWs = null;
       });
 
-      this.containerWs.addEventListener("error", (event) => {
-        console.error("[SessionDO] Container WebSocket error:", event);
+      this.containerWs.addEventListener("error", (event: ErrorEvent) => {
+        const errorDetails = {
+          message: event.message || "no message",
+          filename: event.filename || "unknown",
+          lineno: event.lineno,
+          colno: event.colno,
+          error:
+            event.error instanceof Error
+              ? { name: event.error.name, message: event.error.message }
+              : String(event.error),
+        };
+        console.error("[SessionDO] Container WebSocket error:", errorDetails);
         // Send error to browser
         if (this.browserWs?.readyState === WebSocket.OPEN) {
           this.browserWs.send(
-            JSON.stringify({ type: "error", message: "Container WebSocket connection error" }),
+            JSON.stringify({
+              type: "error",
+              message: `Container WebSocket error: ${errorDetails.message}`,
+            }),
           );
         }
       });

@@ -140,7 +140,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
           JSON.stringify({
             type: "start",
             sessionId,
-            systemPrompt: session?.systemPrompt,
+            ...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
           }),
         );
       });
