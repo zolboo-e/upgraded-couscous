@@ -5,5 +5,6 @@ export {
   mountR2Bucket,
   restoreSessionFromR2,
   syncSessionToR2,
+  waitForMount,
 } from "./r2-sync.js";
 export { getSandboxContext, setEnvironmentVariables } from "./sandbox-manager.js";

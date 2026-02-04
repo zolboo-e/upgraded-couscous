@@ -13,6 +13,20 @@ export async function isR2Mounted(sandbox: Sandbox): Promise<boolean> {
 }
 
 /**
+ * Wait for R2 mount to be ready with retry logic.
+ * The mount operation is async and may not be immediately available.
+ */
+export async function waitForMount(sandbox: Sandbox, maxRetries = 10): Promise<boolean> {
+  for (let i = 0; i < maxRetries; i++) {
+    if (await isR2Mounted(sandbox)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+/**
  * Mount the R2 bucket for session persistence.
  * Returns a result object indicating success or failure with details.
  */
@@ -170,6 +184,8 @@ export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Prom
 			echo "Syncing to R2..." >> $LOG
 			mkdir -p "$PERSISTENT_DIR"
 			if rsync -av "$LOCAL_DIR/" "$PERSISTENT_DIR/" >> $LOG 2>&1; then
+				# Force flush to R2 (s3fs-fuse buffers writes)
+				sync
 				if [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
 					echo "SYNCED" | tee -a $LOG
 				else

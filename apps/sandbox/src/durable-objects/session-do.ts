@@ -12,7 +12,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
 import { CONTAINER_CONFIG, isProduction, SANDBOX_CONFIG } from "../config/env.js";
-import { mountR2Bucket, restoreSessionFromR2, syncSessionToR2 } from "../services/r2-sync.js";
+import {
+  mountR2Bucket,
+  restoreSessionFromR2,
+  syncSessionToR2,
+  waitForMount,
+} from "../services/r2-sync.js";
 
 export class SessionDO extends DurableObject<Env> {
   private browserWs: WebSocket | null = null;
@@ -154,6 +159,12 @@ export class SessionDO extends DurableObject<Env> {
 
         const mountResult = await mountR2Bucket(this.sandbox, this.env);
         if (mountResult.success) {
+          // Wait for mount to be ready (async mount may not be immediately available)
+          const mountReady = await waitForMount(this.sandbox);
+          if (!mountReady) {
+            console.warn("[SessionDO] Mount not ready after waiting, proceeding anyway");
+          }
+
           this.sendSessionStatus("restoring");
           const restoreStatus = await restoreSessionFromR2(this.sandbox, sessionId);
           console.log("[SessionDO] Session restore status:", restoreStatus);
