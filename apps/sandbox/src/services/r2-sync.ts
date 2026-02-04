@@ -104,11 +104,11 @@ export async function restoreSessionFromR2(
 		echo "" >> $LOG
 
 		echo "=== Checking R2 persistent dir ===" >> $LOG
-		ls -la "$PERSISTENT_DIR" 2>&1 >> $LOG
+		ls -la "$PERSISTENT_DIR" >> $LOG 2>&1
 		echo "" >> $LOG
 
 		echo "=== Checking local dir ===" >> $LOG
-		ls -la "$LOCAL_DIR" 2>&1 >> $LOG
+		ls -la "$LOCAL_DIR" >> $LOG 2>&1
 		echo "" >> $LOG
 
 		# Always sync from R2 if data exists (rsync efficiently skips unchanged files)
@@ -131,7 +131,7 @@ export async function restoreSessionFromR2(
 		echo "" >> $LOG
 		echo "=== Final state ===" >> $LOG
 		echo "Local:" >> $LOG
-		ls -la "$LOCAL_DIR" 2>&1 >> $LOG
+		ls -la "$LOCAL_DIR" >> $LOG 2>&1
 	`;
 
   const result = await sandbox.exec(script);
