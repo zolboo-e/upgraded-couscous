@@ -88,7 +88,7 @@ export async function handleStart(
 
   // Send initial message if provided
   if (message.content) {
-    sessionQueue.enqueue(ws, createUserMessage(message.content));
+    sessionQueue.enqueue(ws, createUserMessage(message.content, message.sessionId ?? ""));
   }
 }
 
@@ -113,7 +113,7 @@ export function handleUserMessage(
 
   if (message.content) {
     logger.info("Pushing message to Claude queue");
-    sessionQueue.enqueue(ws, createUserMessage(message.content));
+    sessionQueue.enqueue(ws, createUserMessage(message.content, session.sessionId ?? ""));
   }
 }
 
@@ -154,6 +154,8 @@ export async function handleMessage(
         handleClose(ws, deps);
         ws.close();
         break;
+      default:
+        logger.info("Unhandled message type", { type: (message as { type: string }).type });
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Invalid message";
