@@ -42,6 +42,11 @@ export type RestoreStatus =
   | "RESTORE_VERIFY_FAILED";
 
 /**
+ * Session sync-back to R2 status
+ */
+export type SyncStatus = "SYNCED" | "NO_LOCAL_DATA" | "SYNC_RSYNC_FAILED" | "SYNC_VERIFY_FAILED";
+
+/**
  * R2 bucket mount error codes
  */
 export type MountErrorCode =

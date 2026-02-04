@@ -1,6 +1,6 @@
 import type { Sandbox } from "@cloudflare/sandbox";
 import { getR2Endpoint, R2_CONFIG } from "../config/env.js";
-import type { MountResult, RestoreStatus } from "../types/index.js";
+import type { MountResult, RestoreStatus, SyncStatus } from "../types/index.js";
 
 /**
  * Check if the R2 bucket is mounted at the persistent path
@@ -136,6 +136,60 @@ export async function restoreSessionFromR2(
 
   const result = await sandbox.exec(script);
   return result.stdout.trim() as RestoreStatus;
+}
+
+/**
+ * Sync a session back to R2 persistent storage.
+ * Uses rsync to efficiently sync only changed files.
+ *
+ * @returns The sync status
+ */
+export async function syncSessionToR2(sandbox: Sandbox, sessionId: string): Promise<SyncStatus> {
+  const localDir = "/root/.claude";
+  const persistentDir = `${R2_CONFIG.mountPath}/${sessionId}/.claude`;
+
+  const script = `
+		LOG="/tmp/sync.log"
+		LOCAL_DIR="${localDir}"
+		PERSISTENT_DIR="${persistentDir}"
+
+		echo "=== Sync started at $(date) ===" > $LOG
+		echo "Session ID: ${sessionId}" >> $LOG
+		echo "" >> $LOG
+
+		echo "=== Checking /persistent mount ===" >> $LOG
+		mountpoint /persistent >> $LOG 2>&1 || echo "/persistent is not a mountpoint" >> $LOG
+		echo "" >> $LOG
+
+		echo "=== Checking local dir ===" >> $LOG
+		ls -la "$LOCAL_DIR" 2>&1 >> $LOG
+		echo "" >> $LOG
+
+		# Sync from local to R2 if local data exists
+		if [ -d "$LOCAL_DIR" ] && [ -n "$(ls -A $LOCAL_DIR 2>/dev/null)" ]; then
+			echo "Syncing to R2..." >> $LOG
+			mkdir -p "$PERSISTENT_DIR"
+			if rsync -av "$LOCAL_DIR/" "$PERSISTENT_DIR/" >> $LOG 2>&1; then
+				if [ -n "$(ls -A $PERSISTENT_DIR 2>/dev/null)" ]; then
+					echo "SYNCED" | tee -a $LOG
+				else
+					echo "SYNC_VERIFY_FAILED" | tee -a $LOG
+				fi
+			else
+				echo "SYNC_RSYNC_FAILED" | tee -a $LOG
+			fi
+		else
+			echo "NO_LOCAL_DATA" | tee -a $LOG
+		fi
+
+		echo "" >> $LOG
+		echo "=== Final state ===" >> $LOG
+		echo "Persistent:" >> $LOG
+		ls -la "$PERSISTENT_DIR" 2>&1 >> $LOG
+	`;
+
+  const result = await sandbox.exec(script);
+  return result.stdout.trim() as SyncStatus;
 }
 
 /**

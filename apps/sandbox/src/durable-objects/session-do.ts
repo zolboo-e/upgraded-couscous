@@ -12,7 +12,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
 import { CONTAINER_CONFIG, isProduction, SANDBOX_CONFIG } from "../config/env.js";
-import { mountR2Bucket, restoreSessionFromR2 } from "../services/r2-sync.js";
+import { mountR2Bucket, restoreSessionFromR2, syncSessionToR2 } from "../services/r2-sync.js";
 
 export class SessionDO extends DurableObject<Env> {
   private browserWs: WebSocket | null = null;
@@ -356,6 +356,11 @@ export class SessionDO extends DurableObject<Env> {
         }
       }
 
+      // Sync session to R2 (non-blocking, production only)
+      if (isProduction(this.env) && this.sandbox && this.sessionId) {
+        this.ctx.waitUntil(this.syncToR2());
+      }
+
       // Reset for next message
       this.assistantContent = "";
       return;
@@ -404,6 +409,33 @@ export class SessionDO extends DurableObject<Env> {
     } catch (error) {
       console.error("[SessionDO] Failed to persist message:", error);
       return null;
+    }
+  }
+
+  /**
+   * Sync session to R2 (non-blocking)
+   * Called after responses complete to persist session state
+   */
+  private async syncToR2(): Promise<void> {
+    if (!this.sandbox || !this.sessionId) {
+      return;
+    }
+
+    try {
+      this.sendSessionStatus("syncing");
+      const syncStatus = await syncSessionToR2(this.sandbox, this.sessionId);
+      console.log("[SessionDO] Session sync status:", syncStatus);
+
+      const statusMap: Record<string, string> = {
+        SYNCED: "synced",
+        NO_LOCAL_DATA: "sync_skipped",
+        SYNC_RSYNC_FAILED: "sync_failed",
+        SYNC_VERIFY_FAILED: "sync_failed",
+      };
+      this.sendSessionStatus(statusMap[syncStatus] ?? syncStatus);
+    } catch (error) {
+      console.error("[SessionDO] Failed to sync session to R2:", error);
+      this.sendSessionStatus("sync_failed");
     }
   }
 }
