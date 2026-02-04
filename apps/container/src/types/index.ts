@@ -1,3 +1,4 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { WebSocket } from "ws";
 
 /**
@@ -13,16 +14,15 @@ export interface IncomingMessage {
 
 /**
  * Outgoing WebSocket message to client
+ * sdk_message: forwards raw SDK messages for real-time display
  */
-export interface OutgoingMessage {
-  type: "stream_start" | "chunk" | "stream_end" | "done" | "error";
-  content?: string;
-  message?: string;
-  metadata?: {
-    tokensUsed?: number;
-    stopReason?: string;
-  };
-}
+export type OutgoingMessage =
+  | { type: "stream_start" }
+  | { type: "stream_end" }
+  | { type: "sdk_message"; message: SDKMessage }
+  | { type: "chunk"; content: string }
+  | { type: "done"; metadata?: { tokensUsed?: number; stopReason?: string } }
+  | { type: "error"; message: string };
 
 /**
  * State tracked for each WebSocket session

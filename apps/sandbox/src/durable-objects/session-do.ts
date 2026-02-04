@@ -19,6 +19,7 @@ export class SessionDO extends DurableObject<Env> {
   private containerWs: WebSocket | null = null;
   private sandbox: Sandbox | null = null;
   private sessionId: string | null = null;
+  private assistantContent = "";
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -266,14 +267,21 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   private async handleContainerMessage(msg: string): Promise<void> {
-    let data: {
+    interface SDKMessageData {
       type: string;
-      content?: string;
+      message?: {
+        type: string;
+        message?: {
+          content?: Array<{ type: string; text?: string }>;
+        };
+      };
       metadata?: {
         tokensUsed?: number;
         stopReason?: string;
       };
-    };
+    }
+
+    let data: SDKMessageData;
 
     try {
       data = JSON.parse(msg);
@@ -285,12 +293,50 @@ export class SessionDO extends DurableObject<Env> {
       return;
     }
 
-    // Persist assistant message on completion
-    if (data.type === "done" && data.content) {
-      await this.persistMessage("assistant", data.content, data.metadata);
+    // Extract text from sdk_message for accumulation (for DB persistence)
+    if (data.type === "sdk_message" && data.message?.type === "assistant") {
+      const content = data.message.message?.content;
+      if (Array.isArray(content)) {
+        const textContent = content
+          .filter((block): block is { type: "text"; text: string } => block.type === "text")
+          .map((block) => block.text)
+          .join("");
+        this.assistantContent += textContent;
+      }
     }
 
-    // Forward to browser
+    // On completion, persist accumulated content and include messageId in response
+    if (data.type === "done") {
+      if (this.assistantContent) {
+        const messageId = await this.persistMessage(
+          "assistant",
+          this.assistantContent,
+          data.metadata,
+        );
+
+        // Forward done message with messageId
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(
+            JSON.stringify({
+              type: "done",
+              messageId,
+              metadata: data.metadata,
+            }),
+          );
+        }
+      } else {
+        // No content to persist, forward as-is
+        if (this.browserWs?.readyState === WebSocket.OPEN) {
+          this.browserWs.send(msg);
+        }
+      }
+
+      // Reset for next message
+      this.assistantContent = "";
+      return;
+    }
+
+    // Forward all other messages to browser (including sdk_message)
     if (this.browserWs?.readyState === WebSocket.OPEN) {
       this.browserWs.send(msg);
     }
@@ -298,15 +344,16 @@ export class SessionDO extends DurableObject<Env> {
 
   /**
    * Persist message to API via internal endpoint
+   * Returns messageId on success, null on failure
    */
   private async persistMessage(
     role: "user" | "assistant",
     content: string,
     metadata?: { tokensUsed?: number; stopReason?: string },
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (!this.env.API_BASE_URL || !this.env.INTERNAL_API_TOKEN) {
       console.warn("[SessionDO] API persistence not configured, skipping");
-      return;
+      return null;
     }
 
     try {
@@ -324,9 +371,14 @@ export class SessionDO extends DurableObject<Env> {
 
       if (!response.ok) {
         console.error("[SessionDO] Failed to persist message:", response.status);
+        return null;
       }
+
+      const result = (await response.json()) as { messageId: string };
+      return result.messageId;
     } catch (error) {
       console.error("[SessionDO] Failed to persist message:", error);
+      return null;
     }
   }
 }

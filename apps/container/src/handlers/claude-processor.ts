@@ -5,6 +5,7 @@ import { sendMessage } from "../websocket/send.js";
 
 /**
  * Process messages from Claude Agent SDK
+ * Forwards raw SDK messages for real-time display
  */
 export async function processClaudeMessages(
   ws: WebSocket,
@@ -13,10 +14,9 @@ export async function processClaudeMessages(
   logger: Logger,
   syncSession: (sessionId: string | null) => Promise<void>,
 ): Promise<void> {
-  let streamStarted = false;
-
   try {
     logger.info("Starting Claude query processing");
+
     for await (const message of claudeQuery) {
       // Check if WebSocket is still open
       if (ws.readyState !== WebSocket.OPEN) {
@@ -24,40 +24,17 @@ export async function processClaudeMessages(
         break;
       }
 
+      logger.debug("Received SDK message", {
+        type: message.type,
+        subtype: (message as { subtype?: string }).subtype,
+      });
+
+      // Forward raw SDK message for real-time display
+      sendMessage(ws, { type: "sdk_message", message }, logger);
+
+      // Handle result message for completion
       if (message.type === "result") {
         logger.info("Received SDK result message", message);
-      } else {
-        logger.debug("Received SDK message", {
-          type: message.type,
-          subtype: (message as { subtype?: string }).subtype,
-        });
-      }
-
-      // Handle assistant message content
-      if (message.type === "assistant") {
-        const content = message.message.content;
-        if (Array.isArray(content)) {
-          const textContent = content
-            .filter((block): block is { type: "text"; text: string } => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-
-          if (textContent) {
-            if (!streamStarted) {
-              sendMessage(ws, { type: "stream_start" }, logger);
-              streamStarted = true;
-            }
-            sendMessage(ws, { type: "chunk", content: textContent }, logger);
-          }
-        }
-      }
-
-      // Handle result message
-      if (message.type === "result") {
-        if (streamStarted) {
-          sendMessage(ws, { type: "stream_end" }, logger);
-          streamStarted = false;
-        }
 
         // Sync session files to persistent storage
         await syncSession(sessionId);
@@ -75,12 +52,10 @@ export async function processClaudeMessages(
         );
       }
     }
+
     logger.info("Claude query completed");
   } catch (error) {
     logger.error("Claude query error", error instanceof Error ? error.stack : error);
-    if (streamStarted) {
-      sendMessage(ws, { type: "stream_end" }, logger);
-    }
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     sendMessage(ws, { type: "error", message: errorMessage }, logger);
   }

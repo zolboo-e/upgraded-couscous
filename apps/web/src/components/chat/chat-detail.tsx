@@ -26,6 +26,58 @@ import {
   type ToolPermissionResponse,
 } from "./tool-permission-dialog";
 
+/**
+ * Content block types from Claude Agent SDK
+ */
+interface SDKContentBlock {
+  type: "text" | "tool_use" | "thinking" | "tool_result";
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  thinking?: string;
+  tool_use_id?: string;
+  content?: string;
+}
+
+/**
+ * Raw SDK message structure
+ */
+interface SDKMessagePayload {
+  type: "assistant" | "user" | "result";
+  message?: {
+    content?: SDKContentBlock[];
+  };
+  subtype?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+}
+
+/**
+ * Raw WebSocket chunk from server - uses 'message' for both SDK payloads and error strings
+ */
+interface RawStreamChunk {
+  type: string;
+  content?: string;
+  messageId?: string;
+  metadata?: {
+    model?: string;
+    tokensUsed?: number;
+    stopReason?: string;
+  };
+  message?: SDKMessagePayload | string;
+  requestId?: string;
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
+  questions?: QuestionItem[];
+  sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
+}
+
+/**
+ * Normalized stream chunk with typed message fields
+ */
 interface StreamChunk {
   type:
     | "stream_start"
@@ -35,7 +87,8 @@ interface StreamChunk {
     | "error"
     | "tool_permission_request"
     | "ask_user_question"
-    | "connection_status";
+    | "connection_status"
+    | "sdk_message";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -43,7 +96,10 @@ interface StreamChunk {
     tokensUsed?: number;
     stopReason?: string;
   };
-  message?: string;
+  // Raw SDK message (for sdk_message type)
+  sdkMessage?: SDKMessagePayload;
+  // Error message string (for error type)
+  errorMessage?: string;
   // Permission request fields
   requestId?: string;
   toolName?: string;
@@ -52,6 +108,29 @@ interface StreamChunk {
   questions?: QuestionItem[];
   // Connection status fields
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
+}
+
+function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
+  const chunk: StreamChunk = {
+    type: raw.type as StreamChunk["type"],
+    content: raw.content,
+    messageId: raw.messageId,
+    metadata: raw.metadata,
+    requestId: raw.requestId,
+    toolName: raw.toolName,
+    toolInput: raw.toolInput,
+    questions: raw.questions,
+    sandboxStatus: raw.sandboxStatus,
+  };
+
+  // Type-specific message field mapping
+  if (raw.type === "sdk_message" && raw.message && typeof raw.message !== "string") {
+    chunk.sdkMessage = raw.message;
+  } else if (raw.type === "error" && typeof raw.message === "string") {
+    chunk.errorMessage = raw.message;
+  }
+
+  return chunk;
 }
 
 interface ChatDetailProps {
@@ -157,9 +236,31 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
     };
 
     const handleMessage = (event: MessageEvent): void => {
-      const chunk: StreamChunk = JSON.parse(event.data as string);
+      const raw: RawStreamChunk = JSON.parse(event.data as string);
+      const chunk = parseStreamChunk(raw);
 
       switch (chunk.type) {
+        case "sdk_message": {
+          // Handle raw SDK messages for real-time display
+          const sdkMsg = chunk.sdkMessage;
+          if (sdkMsg?.type === "assistant" && sdkMsg.message?.content) {
+            // Start streaming on first assistant message
+            if (!streamingContentRef.current) {
+              setIsStreaming(true);
+            }
+
+            // Extract text content for display
+            for (const block of sdkMsg.message.content) {
+              if (block.type === "text" && block.text) {
+                streamingContentRef.current += block.text;
+              }
+              // TODO: Handle tool_use and thinking blocks for UI display
+            }
+            setStreamingContent(streamingContentRef.current);
+          }
+          break;
+        }
+
         case "stream_start":
           setIsStreaming(true);
           streamingContentRef.current = "";
@@ -192,7 +293,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
           break;
 
         case "error":
-          setError(chunk.message ?? "An error occurred");
+          setError(chunk.errorMessage ?? "An error occurred");
           streamingContentRef.current = "";
           setStreamingContent("");
           setIsStreaming(false);
