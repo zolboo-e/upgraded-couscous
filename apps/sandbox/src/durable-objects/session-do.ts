@@ -21,6 +21,17 @@ export class SessionDO extends DurableObject<Env> {
   private sessionId: string | null = null;
   private assistantContent = "";
 
+  /**
+   * Send session status to browser for UI display
+   */
+  private sendSessionStatus(
+    status: "restore_started" | "restoring" | "restored" | "restore_skipped" | "restore_failed",
+  ): void {
+    if (this.browserWs?.readyState === WebSocket.OPEN) {
+      this.browserWs.send(JSON.stringify({ type: "session_status", status }));
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -141,13 +152,29 @@ export class SessionDO extends DurableObject<Env> {
 
       // Mount R2 and restore session (production)
       if (isProduction(this.env)) {
+        this.sendSessionStatus("restore_started");
+
         const mountResult = await mountR2Bucket(this.sandbox, this.env);
         if (mountResult.success) {
+          this.sendSessionStatus("restoring");
           const restoreStatus = await restoreSessionFromR2(this.sandbox, sessionId);
           console.log("[SessionDO] Session restore status:", restoreStatus);
+
+          // Map RestoreStatus to user-friendly status
+          const statusMap = {
+            RESTORED: "restored",
+            NO_R2_DATA: "restore_skipped",
+            RESTORE_RSYNC_FAILED: "restore_failed",
+            RESTORE_VERIFY_FAILED: "restore_failed",
+          } as const;
+          this.sendSessionStatus(statusMap[restoreStatus]);
         } else {
           console.warn("[SessionDO] R2 mount failed:", mountResult);
+          this.sendSessionStatus("restore_failed");
         }
+      } else {
+        // Development mode - skip restoration
+        this.sendSessionStatus("restore_skipped");
       }
 
       // Start container process

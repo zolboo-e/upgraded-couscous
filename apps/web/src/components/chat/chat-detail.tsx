@@ -20,6 +20,7 @@ import {
 import { ChatInput } from "./chat-input";
 import { ChatMessage, StreamingMessage } from "./chat-message";
 import { type AgentStatus, ConnectionStatusBar, type ServerStatus } from "./connection-status-bar";
+import type { SessionRestoreStatusValue } from "./session-restore-status";
 import {
   ToolPermissionDialog,
   type ToolPermissionRequest,
@@ -73,6 +74,8 @@ interface RawStreamChunk {
   toolInput?: Record<string, unknown>;
   questions?: QuestionItem[];
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
+  // Session status field
+  status?: SessionRestoreStatusValue;
 }
 
 /**
@@ -88,7 +91,8 @@ interface StreamChunk {
     | "tool_permission_request"
     | "ask_user_question"
     | "connection_status"
-    | "sdk_message";
+    | "sdk_message"
+    | "session_status";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -108,6 +112,8 @@ interface StreamChunk {
   questions?: QuestionItem[];
   // Connection status fields
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
+  // Session restore status
+  sessionStatus?: SessionRestoreStatusValue;
 }
 
 function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
@@ -128,6 +134,8 @@ function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
     chunk.sdkMessage = raw.message;
   } else if (raw.type === "error" && typeof raw.message === "string") {
     chunk.errorMessage = raw.message;
+  } else if (raw.type === "session_status" && raw.status) {
+    chunk.sessionStatus = raw.status;
   }
 
   return chunk;
@@ -151,6 +159,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   const [pendingQuestion, setPendingQuestion] = useState<AskUserQuestionRequest | null>(null);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("disconnected");
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("unknown");
+  const [sessionRestoreStatus, setSessionRestoreStatus] =
+    useState<SessionRestoreStatusValue | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -349,6 +359,12 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             setAgentStatus(chunk.sandboxStatus);
           }
           break;
+
+        case "session_status":
+          if (chunk.sessionStatus) {
+            setSessionRestoreStatus(chunk.sessionStatus);
+          }
+          break;
       }
     };
 
@@ -470,7 +486,11 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             </Link>
             <h1 className="text-lg font-semibold">{session?.title ?? "Untitled Chat"}</h1>
           </div>
-          <ConnectionStatusBar serverStatus={serverStatus} agentStatus={agentStatus} />
+          <ConnectionStatusBar
+            serverStatus={serverStatus}
+            agentStatus={agentStatus}
+            sessionRestoreStatus={sessionRestoreStatus}
+          />
         </div>
       </div>
 

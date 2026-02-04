@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectionStatus, type ConnectionStatusValue } from "./connection-status";
+import { SessionRestoreStatus, type SessionRestoreStatusValue } from "./session-restore-status";
 
 export type ServerStatus = "connected" | "disconnected" | "connecting";
 export type AgentStatus =
@@ -13,11 +14,13 @@ export type AgentStatus =
 interface ConnectionStatusBarProps {
   serverStatus: ServerStatus;
   agentStatus: AgentStatus;
+  sessionRestoreStatus?: SessionRestoreStatusValue | null;
 }
 
 export function ConnectionStatusBar({
   serverStatus,
   agentStatus,
+  sessionRestoreStatus,
 }: ConnectionStatusBarProps): React.ReactElement {
   return (
     <div className="flex items-center gap-4 text-sm">
@@ -29,6 +32,12 @@ export function ConnectionStatusBar({
         <span className="text-muted-foreground">Agent:</span>
         <ConnectionStatus status={agentStatus as ConnectionStatusValue} showLabel={false} />
       </div>
+      {sessionRestoreStatus && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Session:</span>
+          <SessionRestoreStatus status={sessionRestoreStatus} showLabel={false} />
+        </div>
+      )}
     </div>
   );
 }
