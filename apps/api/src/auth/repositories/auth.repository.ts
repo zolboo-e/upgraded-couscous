@@ -1,4 +1,15 @@
-import { type Database, type NewUser, type User, users } from "@repo/db";
+import {
+  type Company,
+  type CompanyMember,
+  companies,
+  companyMembers,
+  type Database,
+  type NewCompany,
+  type NewCompanyMember,
+  type NewUser,
+  type User,
+  users,
+} from "@repo/db";
 import { eq } from "drizzle-orm";
 
 export class AuthRepository {
@@ -21,5 +32,15 @@ export class AuthRepository {
   async findUserById(id: string): Promise<User | null> {
     const [user] = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
     return user ?? null;
+  }
+
+  async createCompany(data: NewCompany): Promise<Company> {
+    const [company] = await this.db.insert(companies).values(data).returning();
+    return company;
+  }
+
+  async createCompanyMember(data: NewCompanyMember): Promise<CompanyMember> {
+    const [member] = await this.db.insert(companyMembers).values(data).returning();
+    return member;
   }
 }

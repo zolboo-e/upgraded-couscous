@@ -20,10 +20,20 @@ export class AuthService {
 
     const passwordHash = await hashPassword(input.password);
 
+    const company = await this.repository.createCompany({
+      name: input.companyName,
+    });
+
     const user = await this.repository.createUser({
       email: input.email.toLowerCase(),
       name: input.name ?? null,
       passwordHash,
+    });
+
+    await this.repository.createCompanyMember({
+      companyId: company.id,
+      userId: user.id,
+      role: "admin",
     });
 
     return this.createTokenForUser(user.id, user.email, user.name);
