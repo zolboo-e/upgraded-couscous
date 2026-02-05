@@ -2,15 +2,14 @@ import type { Database } from "@repo/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import type { UpgradeWebSocket } from "hono/ws";
 import { createAuthModule } from "./auth/index.js";
 import { createChatModule } from "./chat/index.js";
 import { env } from "./config/env.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
 
-export function createApp(db: Database, upgradeWebSocket: UpgradeWebSocket) {
+export function createApp(db: Database) {
   const authModule = createAuthModule(db);
-  const chatModule = createChatModule(db, upgradeWebSocket, authModule.middleware);
+  const chatModule = createChatModule(db, authModule.middleware);
 
   // Chain sub-routers and export THIS type for RPC
   // Following Hono best practices: https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications
@@ -20,7 +19,6 @@ export function createApp(db: Database, upgradeWebSocket: UpgradeWebSocket) {
     .use("*", errorHandler)
     .route("/auth", authModule.routes)
     .route("/chat", chatModule.routes)
-    .get("/", (c) => c.json({ message: "Welcome to Upgraded Couscous API", version: "1.0.0" }))
     .get("/health", (c) => c.json({ status: "ok" }));
 
   return routes;

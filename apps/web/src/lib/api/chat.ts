@@ -1,4 +1,5 @@
 import { parseResponse } from "hono/client";
+import { getSessionToken } from "../actions/auth";
 import { api } from "./client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -48,20 +49,11 @@ export interface ChatSessionWithMessages extends ChatSession {
 }
 
 /**
- * Get a short-lived WebSocket token for connecting to sandbox
- * This is needed because browsers can't set Authorization headers on WebSocket
+ * Get session token for WebSocket connections to sandbox.
+ * Uses server action since browsers can't set Authorization headers on WebSocket.
  */
 export async function getWsToken(): Promise<string | null> {
-  try {
-    const response = await api.auth["ws-token"].$get();
-    if (!response.ok) {
-      return null;
-    }
-    const data = await response.json();
-    return data.data.token;
-  } catch {
-    return null;
-  }
+  return getSessionToken();
 }
 
 // WebSocket-specific types (not covered by RPC)

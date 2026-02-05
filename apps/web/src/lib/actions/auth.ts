@@ -69,3 +69,12 @@ export async function logout(): Promise<never> {
   cookieStore.delete("session");
   redirect("/login");
 }
+
+/**
+ * Get the session token for WebSocket connections.
+ * This is needed because browsers can't set Authorization headers on WebSocket.
+ */
+export async function getSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get("session")?.value ?? null;
+}

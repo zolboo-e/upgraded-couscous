@@ -12,6 +12,5 @@ export function createAuthRoutes(handlers: AuthHandlers, authService: AuthServic
   return new Hono()
     .post("/register", sValidator("json", registerSchema), handlers.register)
     .post("/login", sValidator("json", loginSchema), handlers.login)
-    .get("/me", authMiddleware, handlers.me)
-    .get("/ws-token", authMiddleware, handlers.wsToken);
+    .get("/me", authMiddleware, handlers.me);
 }
