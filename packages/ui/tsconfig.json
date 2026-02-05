@@ -1,8 +1,7 @@
 {
   "extends": "@repo/typescript-config/library.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@repo/ui/*": ["./src/*"]

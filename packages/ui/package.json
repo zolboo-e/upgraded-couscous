@@ -24,22 +24,22 @@
     }
   },
   "scripts": {
-    "build": "tsc && tailwindcss -i ./src/styles.css -o ./dist/styles.css",
-    "dev": "tsc --watch"
+    "build": "tsup && tailwindcss -i ./src/styles.css -o ./dist/styles.css",
+    "dev": "tsup --watch"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.511.0",
+    "lucide-react": "^0.563.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@repo/tailwind-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@tailwindcss/cli": "^4.1.18",
-    "@types/react": "^19.2.10",
+    "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "react": "^19.2.4",
     "tailwindcss": "^4.1.18",
