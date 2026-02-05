@@ -1,21 +1,15 @@
 "use server";
 
+import { parseResponse } from "hono/client";
 import { decodeJwt } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { api } from "../api/client";
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
-}
-
-interface AuthErrorResponse {
-  error?: {
-    message: string;
-  };
 }
 
 async function setSessionCookie(token: string): Promise<void> {
@@ -44,36 +38,19 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     return null;
   }
 
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    headers: {
-      Authorization: `Bearer ${sessionCookie.value}`,
-    },
-  });
-
-  if (!response.ok) {
+  try {
+    const result = await parseResponse(api.auth.me.$get());
+    return result.data.user;
+  } catch {
     return null;
   }
-
-  const result = await response.json();
-  return result.data.user;
 }
 
 export async function login(
   data: { email: string; password: string },
   callbackUrl?: string,
 ): Promise<never> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const error: AuthErrorResponse = await response.json();
-    throw new Error(error.error?.message ?? "Login failed");
-  }
-
-  const result = await response.json();
+  const result = await parseResponse(api.auth.login.$post({ json: data }));
   await setSessionCookie(result.data.token);
   redirect(callbackUrl ?? "/chats");
 }
@@ -82,18 +59,7 @@ export async function register(
   data: { email: string; password: string; name?: string },
   callbackUrl?: string,
 ): Promise<never> {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const error: AuthErrorResponse = await response.json();
-    throw new Error(error.error?.message ?? "Registration failed");
-  }
-
-  const result = await response.json();
+  const result = await parseResponse(api.auth.register.$post({ json: data }));
   await setSessionCookie(result.data.token);
   redirect(callbackUrl ?? "/chats");
 }

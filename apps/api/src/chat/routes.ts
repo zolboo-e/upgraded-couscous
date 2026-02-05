@@ -12,72 +12,74 @@ export function createChatRoutes(
   chatService: ChatService,
   upgradeWebSocket: UpgradeWebSocket,
   authMiddleware: MiddlewareHandler,
-): Hono {
-  const chat = new Hono();
+) {
+  // Chain all routes - this preserves type inference for RPC
+  // Apply auth middleware per-route instead of use("*", ...)
+  return new Hono()
+    .post(
+      "/sessions",
+      authMiddleware,
+      sValidator("json", createSessionSchema),
+      handlers.createSession,
+    )
+    .get("/sessions", authMiddleware, handlers.listSessions)
+    .get("/sessions/:id", authMiddleware, sValidator("param", sessionIdSchema), handlers.getSession)
+    .delete(
+      "/sessions/:id",
+      authMiddleware,
+      sValidator("param", sessionIdSchema),
+      handlers.deleteSession,
+    )
+    .get(
+      "/sessions/:id/ws",
+      authMiddleware,
+      sValidator("param", sessionIdSchema),
+      upgradeWebSocket((c) => {
+        const userId = c.get("userId");
+        const sessionId = c.req.param("id");
 
-  // Apply auth middleware to all chat routes
-  chat.use("*", authMiddleware);
+        let wsState: Awaited<ReturnType<typeof wsHandler.onOpen>> | null = null;
 
-  // Session CRUD routes
-  chat.post("/sessions", sValidator("json", createSessionSchema), handlers.createSession);
+        return {
+          onOpen: async (_evt, ws) => {
+            // Send connecting status immediately so frontend shows progress
+            ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "connecting" }));
 
-  chat.get("/sessions", handlers.listSessions);
+            try {
+              const session = await chatService.getSession(userId, sessionId);
+              wsState = await wsHandler.onOpen(
+                ws as unknown as WSContext,
+                session,
+                session.messages,
+                userId,
+              );
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : "Failed to initialize session";
+              // Send disconnected status so frontend knows connection failed
+              ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }));
+              ws.send(JSON.stringify({ type: "error", message }));
+              ws.close(1008, message);
+            }
+          },
 
-  chat.get("/sessions/:id", sValidator("param", sessionIdSchema), handlers.getSession);
+          onMessage: async (evt, ws) => {
+            if (!wsState) return;
 
-  chat.delete("/sessions/:id", sValidator("param", sessionIdSchema), handlers.deleteSession);
+            const data = typeof evt.data === "string" ? evt.data : evt.data.toString();
+            await wsHandler.onMessage(ws as unknown as WSContext, wsState, chatService, data);
+          },
 
-  // WebSocket route for real-time chat
-  chat.get(
-    "/sessions/:id/ws",
-    sValidator("param", sessionIdSchema),
-    upgradeWebSocket((c) => {
-      const userId = c.get("userId");
-      const sessionId = c.req.param("id");
+          onClose: () => {
+            if (wsState) {
+              wsHandler.onClose(wsState);
+            }
+          },
 
-      let wsState: Awaited<ReturnType<typeof wsHandler.onOpen>> | null = null;
-
-      return {
-        onOpen: async (_evt, ws) => {
-          // Send connecting status immediately so frontend shows progress
-          ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "connecting" }));
-
-          try {
-            const session = await chatService.getSession(userId, sessionId);
-            wsState = await wsHandler.onOpen(
-              ws as unknown as WSContext,
-              session,
-              session.messages,
-              userId,
-            );
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to initialize session";
-            // Send disconnected status so frontend knows connection failed
-            ws.send(JSON.stringify({ type: "connection_status", sandboxStatus: "disconnected" }));
-            ws.send(JSON.stringify({ type: "error", message }));
-            ws.close(1008, message);
-          }
-        },
-
-        onMessage: async (evt, ws) => {
-          if (!wsState) return;
-
-          const data = typeof evt.data === "string" ? evt.data : evt.data.toString();
-          await wsHandler.onMessage(ws as unknown as WSContext, wsState, chatService, data);
-        },
-
-        onClose: () => {
-          if (wsState) {
-            wsHandler.onClose(wsState);
-          }
-        },
-
-        onError: (evt) => {
-          console.error("WebSocket error:", evt);
-        },
-      };
-    }),
-  );
-
-  return chat;
+          onError: (evt) => {
+            console.error("WebSocket error:", evt);
+          },
+        };
+      }),
+    );
 }

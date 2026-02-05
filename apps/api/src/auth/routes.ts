@@ -5,21 +5,13 @@ import { createAuthMiddleware } from "./middleware/auth.middleware.js";
 import type { AuthService } from "./services/auth.service.js";
 import { loginSchema, registerSchema } from "./types/request.types.js";
 
-export function createAuthRoutes(handlers: AuthHandlers, authService: AuthService): Hono {
-  const auth = new Hono();
+export function createAuthRoutes(handlers: AuthHandlers, authService: AuthService) {
+  const authMiddleware = createAuthMiddleware(authService);
 
-  // Public routes (no authentication required)
-  auth.post("/register", sValidator("json", registerSchema), handlers.register);
-  auth.post("/login", sValidator("json", loginSchema), handlers.login);
-
-  // Protected routes (authentication required)
-  const protectedRoutes = new Hono();
-  protectedRoutes.use("*", createAuthMiddleware(authService));
-
-  protectedRoutes.get("/me", handlers.me);
-  protectedRoutes.get("/ws-token", handlers.wsToken);
-
-  auth.route("/", protectedRoutes);
-
-  return auth;
+  // Chain all routes - this preserves type inference for RPC
+  return new Hono()
+    .post("/register", sValidator("json", registerSchema), handlers.register)
+    .post("/login", sValidator("json", loginSchema), handlers.login)
+    .get("/me", authMiddleware, handlers.me)
+    .get("/ws-token", authMiddleware, handlers.wsToken);
 }

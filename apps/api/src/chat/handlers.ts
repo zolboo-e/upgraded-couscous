@@ -4,7 +4,7 @@ import type { CreateSessionInput } from "./types/chat.types.js";
 
 export function createChatHandlers(chatService: ChatService) {
   return {
-    createSession: async (c: Context): Promise<Response> => {
+    createSession: async (c: Context) => {
       const userId = c.get("userId");
       const input = (await c.req.json()) as CreateSessionInput;
 
@@ -13,7 +13,7 @@ export function createChatHandlers(chatService: ChatService) {
       return c.json({ data: session }, 201);
     },
 
-    listSessions: async (c: Context): Promise<Response> => {
+    listSessions: async (c: Context) => {
       const userId = c.get("userId");
 
       const sessions = await chatService.listSessions(userId);
@@ -21,7 +21,7 @@ export function createChatHandlers(chatService: ChatService) {
       return c.json({ data: sessions });
     },
 
-    getSession: async (c: Context): Promise<Response> => {
+    getSession: async (c: Context) => {
       const userId = c.get("userId");
       const id = c.req.param("id");
 
@@ -30,7 +30,7 @@ export function createChatHandlers(chatService: ChatService) {
       return c.json({ data: session });
     },
 
-    deleteSession: async (c: Context): Promise<Response> => {
+    deleteSession: async (c: Context) => {
       const userId = c.get("userId");
       const id = c.req.param("id");
 
