@@ -12,12 +12,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
 import { CONTAINER_CONFIG, isProduction, SANDBOX_CONFIG } from "../config/env.js";
-import {
-  mountR2Bucket,
-  restoreSessionFromR2,
-  syncSessionToR2,
-  waitForMount,
-} from "../services/r2-sync.js";
+import { mountR2Bucket, restoreSessionFromR2, waitForMount } from "../services/r2-sync.js";
+import { MessagePersistenceQueue } from "./message-persistence-queue.js";
+import { PendingMessageBuffer } from "./pending-message-buffer.js";
+import { SyncManager } from "./sync-manager.js";
 
 export class SessionDO extends DurableObject<Env> {
   private browserWs: WebSocket | null = null;
@@ -25,6 +23,36 @@ export class SessionDO extends DurableObject<Env> {
   private sandbox: Sandbox | null = null;
   private sessionId: string | null = null;
   private assistantContent = "";
+
+  // Robust sync and persistence components
+  private syncManager: SyncManager;
+  private persistenceQueue: MessagePersistenceQueue;
+  private pendingMessages: PendingMessageBuffer;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+
+    // Initialize sync manager with debounce configuration
+    this.syncManager = new SyncManager({
+      debounceMs: 2000, // Wait 2s after last "done"
+      maxDebounceMs: 10000, // Force sync after 10s max
+      maxRetries: 3,
+    });
+
+    // Initialize persistence queue
+    this.persistenceQueue = new MessagePersistenceQueue(
+      env.API_BASE_URL ?? "",
+      env.INTERNAL_API_TOKEN ?? "",
+    );
+
+    // Initialize pending message buffer
+    this.pendingMessages = new PendingMessageBuffer();
+
+    // Connect sync status to browser
+    this.syncManager.setStatusCallback((status) => {
+      this.sendSessionStatus(status);
+    });
+  }
 
   /**
    * Send session status to browser for UI display
@@ -93,15 +121,26 @@ export class SessionDO extends DurableObject<Env> {
     if (data.type === "start") {
       await this.startContainer(data);
     } else if (data.type === "message" && data.content) {
-      // Persist user message
-      await this.persistMessage("user", data.content);
+      // Persist user message (ordered, non-blocking)
+      this.ctx.waitUntil(this.persistenceQueue.enqueue("user", data.content));
+
       // Forward to container
       if (this.containerWs?.readyState === WebSocket.OPEN) {
         this.containerWs.send(msg);
+      } else {
+        // Container has slept - queue message and restart
+        console.log("[SessionDO] Container not connected, queuing message");
+        this.pendingMessages.add(msg, data.type);
+        await this.startContainer({ sessionId: this.sessionId ?? undefined });
       }
     } else if (this.containerWs?.readyState === WebSocket.OPEN) {
       // Forward other messages (permission responses, close, etc.)
       this.containerWs.send(msg);
+    } else if (data.type === "permission_response" || data.type === "ask_user_answer") {
+      // These messages also need container - queue and restart
+      console.log("[SessionDO] Container not connected, queuing:", data.type);
+      this.pendingMessages.add(msg, data.type);
+      await this.startContainer({ sessionId: this.sessionId ?? undefined });
     }
   }
 
@@ -111,7 +150,17 @@ export class SessionDO extends DurableObject<Env> {
   async webSocketClose(_ws: WebSocket): Promise<void> {
     console.log("[SessionDO] Browser disconnected for session:", this.sessionId);
     this.browserWs = null;
-    // Container will go idle via sleepAfter, no need to close explicitly
+
+    // Force sync on disconnect to ensure data is persisted
+    if (isProduction(this.env) && this.sandbox && this.sessionId) {
+      this.ctx.waitUntil(
+        this.syncManager.forceSync().then((result) => {
+          if (!result.success) {
+            console.error("[SessionDO] Force sync on disconnect failed:", result.error);
+          }
+        }),
+      );
+    }
   }
 
   /**
@@ -129,6 +178,9 @@ export class SessionDO extends DurableObject<Env> {
   }): Promise<void> {
     const sessionId = data.sessionId ?? this.sessionId ?? "default";
     this.sessionId = sessionId;
+
+    // Initialize persistence queue with session ID
+    this.persistenceQueue.initialize(sessionId);
 
     console.log("[SessionDO] Starting container for session:", sessionId);
 
@@ -163,6 +215,15 @@ export class SessionDO extends DurableObject<Env> {
           const mountReady = await waitForMount(this.sandbox);
           if (!mountReady) {
             console.warn("[SessionDO] Mount not ready after waiting, proceeding anyway");
+          }
+
+          // Initialize sync manager with sandbox and DO storage
+          this.syncManager.initialize(this.sandbox, sessionId, this.ctx.storage);
+
+          // Attempt recovery from previous failed sync
+          const recovered = await this.syncManager.attemptRecovery();
+          if (recovered) {
+            this.sendSessionStatus("sync_recovered");
           }
 
           this.sendSessionStatus("restoring");
@@ -227,6 +288,9 @@ export class SessionDO extends DurableObject<Env> {
 
       // Forward start message to container
       this.containerWs.send(JSON.stringify(data));
+
+      // Drain any pending messages that triggered reconnection
+      await this.drainPendingMessages();
 
       this.containerWs.addEventListener("message", async (event) => {
         await this.handleContainerMessage(event.data as string);
@@ -302,6 +366,23 @@ export class SessionDO extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Drain all pending messages to the container
+   */
+  private async drainPendingMessages(): Promise<void> {
+    if (!this.containerWs || this.containerWs.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const pending = this.pendingMessages.drain();
+    if (pending.length > 0) {
+      console.log(`[SessionDO] Draining ${pending.length} pending messages`);
+      for (const msg of pending) {
+        this.containerWs.send(msg.raw);
+      }
+    }
+  }
+
   private async handleContainerMessage(msg: string): Promise<void> {
     interface SDKMessageData {
       type: string;
@@ -344,7 +425,8 @@ export class SessionDO extends DurableObject<Env> {
     // On completion, persist accumulated content and include messageId in response
     if (data.type === "done") {
       if (this.assistantContent) {
-        const messageId = await this.persistMessage(
+        // Persist assistant message (ordered, with retry)
+        const messageId = await this.persistenceQueue.enqueue(
           "assistant",
           this.assistantContent,
           data.metadata,
@@ -367,9 +449,15 @@ export class SessionDO extends DurableObject<Env> {
         }
       }
 
-      // Sync session to R2 (non-blocking, production only)
+      // Request sync (debounced, non-blocking, production only)
       if (isProduction(this.env) && this.sandbox && this.sessionId) {
-        this.ctx.waitUntil(this.syncToR2());
+        this.ctx.waitUntil(
+          this.syncManager.requestSync().then((result) => {
+            if (!result.success) {
+              console.error("[SessionDO] Sync failed:", result.error);
+            }
+          }),
+        );
       }
 
       // Reset for next message
@@ -380,97 +468,6 @@ export class SessionDO extends DurableObject<Env> {
     // Forward all other messages to browser (including sdk_message)
     if (this.browserWs?.readyState === WebSocket.OPEN) {
       this.browserWs.send(msg);
-    }
-  }
-
-  /**
-   * Persist message to API via internal endpoint
-   * Returns messageId on success, null on failure
-   */
-  private async persistMessage(
-    role: "user" | "assistant",
-    content: string,
-    metadata?: { tokensUsed?: number; stopReason?: string },
-  ): Promise<string | null> {
-    if (!this.env.API_BASE_URL || !this.env.INTERNAL_API_TOKEN) {
-      console.warn("[SessionDO] API persistence not configured, skipping");
-      return null;
-    }
-
-    try {
-      const response = await fetch(
-        `${this.env.API_BASE_URL}/internal/sessions/${this.sessionId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Service-Token": this.env.INTERNAL_API_TOKEN,
-          },
-          body: JSON.stringify({ role, type: "message", content, metadata }),
-        },
-      );
-
-      if (!response.ok) {
-        console.error("[SessionDO] Failed to persist message:", response.status);
-        return null;
-      }
-
-      const result = (await response.json()) as { messageId: string };
-      return result.messageId;
-    } catch (error) {
-      console.error("[SessionDO] Failed to persist message:", error);
-      return null;
-    }
-  }
-
-  /**
-   * Sync session to R2 (non-blocking)
-   * Called after responses complete to persist session state
-   */
-  private async syncToR2(): Promise<void> {
-    if (!this.sandbox || !this.sessionId) {
-      return;
-    }
-
-    try {
-      this.sendSessionStatus("syncing");
-      const syncStatus = await syncSessionToR2(this.sandbox, this.sessionId);
-      console.log("[SessionDO] Session sync status:", syncStatus);
-
-      if (syncStatus === "SYNCED") {
-        // Run filesystem sync separately to flush to R2
-        this.sendSessionStatus("flushing");
-        // const flushResult = await this.sandbox.exec("sync");
-        // console.log("[SessionDO] Filesystem flush result:", {
-        //   stdout: flushResult.stdout,
-        //   stderr: flushResult.stderr,
-        // });
-
-        // Send detailed result to browser
-        if (this.browserWs?.readyState === WebSocket.OPEN) {
-          this.browserWs.send(
-            JSON.stringify({
-              type: "session_status",
-              status: "synced",
-              details: {
-                rsyncStatus: syncStatus,
-                // flushStdout: flushResult.stdout,
-                // flushStderr: flushResult.stderr,
-              },
-            }),
-          );
-        }
-      } else {
-        const statusMap: Record<string, string> = {
-          NO_LOCAL_DATA: "sync_skipped",
-          SYNC_RSYNC_FAILED: "sync_failed",
-          SYNC_VERIFY_FAILED: "sync_failed",
-        };
-        this.sendSessionStatus(statusMap[syncStatus] ?? syncStatus);
-      }
-    } catch (error) {
-      console.error("[SessionDO] Failed to sync session to R2:", error);
-      this.sendSessionStatus("sync_failed");
     }
   }
 }
