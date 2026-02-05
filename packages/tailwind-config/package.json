@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    ".": "./shared-styles.css",
     "./globals.css": "./globals.css",
     "./postcss": "./postcss.config.mjs"
   },
