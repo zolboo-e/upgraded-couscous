@@ -90,8 +90,8 @@ export class SessionDO extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
-    // Accept with hibernation support
-    this.ctx.acceptWebSocket(server);
+    // Accept with hibernation support, storing sessionId in tags for recovery
+    this.ctx.acceptWebSocket(server, [this.sessionId]);
     this.browserWs = server;
 
     return new Response(null, { status: 101, webSocket: client });
@@ -101,7 +101,18 @@ export class SessionDO extends DurableObject<Env> {
    * Hibernation API: called when browser sends a message
    * DO wakes from sleep to handle this
    */
-  async webSocketMessage(_ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // Restore state after hibernation - ws is the browser's WebSocket
+    this.browserWs = ws;
+
+    // Restore sessionId from WebSocket tags if lost during hibernation
+    if (!this.sessionId) {
+      const tags = this.ctx.getTags(ws);
+      if (tags.length > 0) {
+        this.sessionId = tags[0];
+      }
+    }
+
     const msg = typeof message === "string" ? message : new TextDecoder().decode(message);
 
     let data: {
@@ -147,7 +158,15 @@ export class SessionDO extends DurableObject<Env> {
   /**
    * Hibernation API: called when browser disconnects
    */
-  async webSocketClose(_ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket): Promise<void> {
+    // Restore sessionId from WebSocket tags if lost during hibernation
+    if (!this.sessionId) {
+      const tags = this.ctx.getTags(ws);
+      if (tags.length > 0) {
+        this.sessionId = tags[0];
+      }
+    }
+
     console.log("[SessionDO] Browser disconnected for session:", this.sessionId);
     this.browserWs = null;
 
@@ -166,8 +185,16 @@ export class SessionDO extends DurableObject<Env> {
   /**
    * Hibernation API: called on WebSocket error
    */
-  async webSocketError(_ws: WebSocket, error: unknown): Promise<void> {
-    console.error("[SessionDO] WebSocket error:", error);
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    // Restore sessionId from WebSocket tags if lost during hibernation
+    if (!this.sessionId) {
+      const tags = this.ctx.getTags(ws);
+      if (tags.length > 0) {
+        this.sessionId = tags[0];
+      }
+    }
+
+    console.error("[SessionDO] WebSocket error for session:", this.sessionId, error);
     this.browserWs = null;
   }
 
