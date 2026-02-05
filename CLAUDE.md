@@ -22,6 +22,7 @@ pnpm format       # Format with Biome
 pnpm db:generate  # Generate Drizzle migrations
 pnpm db:migrate   # Run migrations
 pnpm db:push      # Push schema to database
+pnpm dlx shadcn@latest add <component>  # Add shadcn/ui component
 ```
 
 ## Structure
