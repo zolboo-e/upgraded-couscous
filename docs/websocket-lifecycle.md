@@ -1,25 +1,148 @@
 # WebSocket Connection Lifecycle
 
-This document details the WebSocket connection lifecycle between the three components: Web (Next.js), Durable Object (Cloudflare), and Container (Claude Agent SDK).
+This document details the WebSocket connection lifecycle between the components: Web (Next.js), Durable Objects (Cloudflare), and Container (Claude Agent SDK).
 
 ## Architecture Overview
 
 ```
-┌─────────────────┐     ┌─────────────────────┐     ┌─────────────────┐
-│   BROWSER       │     │   DURABLE OBJECT    │     │   CONTAINER     │
-│   (Next.js)     │────▶│   (SessionDO)       │────▶│   (Bun/Node)    │
-│                 │◀────│                     │◀────│                 │
-└─────────────────┘     └─────────────────────┘     └─────────────────┘
-        │                       │                          │
-   WebSocket #1            WebSocket #2              WebSocket Server
-   (Browser WS)            (Container WS)            (Port 8080)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Cloudflare Edge                                │
+│                                                                         │
+│  ┌────────┐    ┌────────────┐    ┌────────────┐    ┌─────────────────┐ │
+│  │ Worker │───►│  SessionDO │───►│ Sandbox DO │───►│    Container    │ │
+│  │(route) │    │  (custom)  │    │ (CF built- │    │   (your app)    │ │
+│  └────────┘    └────────────┘    │  in DO)    │    └─────────────────┘ │
+│                      │           └────────────┘           │             │
+│                      │                 │                  │             │
+│               Browser WS          mounts R2          /persistent        │
+│              (Hibernation)             │                  │             │
+│                                        ▼                  ▼             │
+│                                  ┌──────────┐      ┌──────────┐        │
+│                                  │    R2    │ ───► │ Container│        │
+│                                  │  Bucket  │      │Filesystem│        │
+│                                  └──────────┘      └──────────┘        │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-The system uses a three-tier WebSocket architecture:
+The system uses a multi-tier architecture:
 
 1. **Web** (Next.js frontend) - User interface and WebSocket client
-2. **DO** (Durable Object in Cloudflare Workers) - Connection manager, message relay, persistence
-3. **Container** (Claude Agent SDK server) - AI processing with Claude
+2. **SessionDO** (Custom Durable Object) - Connection manager, message relay, persistence logic
+3. **Sandbox DO** (Cloudflare built-in) - Container lifecycle, process management, R2 mounting
+4. **Container** (Claude Agent SDK server) - AI processing with Claude
+
+---
+
+## Durable Objects Architecture
+
+The sandbox worker uses **two Durable Objects**:
+
+### SessionDO (Custom - Your Code)
+
+Your custom DO that handles session-level logic:
+
+| Capability | Description |
+|------------|-------------|
+| Browser WebSocket | Accepts connections with Hibernation API |
+| Message relay | Forwards messages between browser and container |
+| Message persistence | Calls API to save messages to database |
+| R2 sync orchestration | Triggers mount/restore/sync via Sandbox DO |
+| Connection status | Sends `connecting`/`connected` updates |
+| Content accumulation | Aggregates assistant responses for DB |
+
+### Sandbox DO (Cloudflare Built-in)
+
+Cloudflare's container runtime DO - **you cannot modify this code**:
+
+```typescript
+// This is ALL you can do with Sandbox DO
+const sandbox = getSandbox(env.Sandbox, sessionId, options);
+
+sandbox.setEnvVars({ ... });        // Set environment variables
+sandbox.mountBucket(...);           // Mount R2 bucket into container
+sandbox.startProcess(...);          // Start a process in container
+sandbox.exec(...);                  // Execute command in container
+sandbox.wsConnect(...);             // WebSocket tunnel to container port
+sandbox.destroy();                  // Kill container
+```
+
+### Why Both DOs Are Needed
+
+| Need | Sandbox DO | SessionDO |
+|------|------------|-----------|
+| Accept browser WebSocket | ❌ | ✅ |
+| Hibernation API | ❌ | ✅ |
+| Custom message handling | ❌ | ✅ |
+| Persist messages to DB | ❌ | ✅ |
+| Accumulate assistant content | ❌ | ✅ |
+| R2 sync logic (rsync commands) | ❌ | ✅ |
+| Send connection status updates | ❌ | ✅ |
+| Container lifecycle | ✅ | ❌ |
+| Process execution | ✅ | ❌ |
+| R2 bucket mounting | ✅ | ❌ |
+
+You **cannot** add custom logic to Sandbox DO - it's Cloudflare's code. SessionDO exists to add your application logic on top.
+
+---
+
+## Hibernation API
+
+### What It Does
+
+The Hibernation API allows Durable Objects to "sleep" between WebSocket messages, reducing costs dramatically.
+
+### Cost Model
+
+| Billing Type | When | Cost |
+|--------------|------|------|
+| **Without Hibernation** | Wall-clock time | Billed entire duration WS is connected |
+| **With Hibernation** | CPU time only | Billed only when processing messages |
+
+### How It Works
+
+```typescript
+// Traditional approach - DO stays awake continuously
+ws.addEventListener("message", handler);  // ❌ Billed for wall-clock time
+
+// Hibernation approach - DO can sleep between messages
+this.ctx.acceptWebSocket(server);         // ✅ Billed per-event (CPU time)
+
+// Instead of event listeners, implement these methods:
+async webSocketMessage(ws, message) { }   // Called when message arrives
+async webSocketClose(ws) { }              // Called on disconnect
+```
+
+### Cost Timeline
+
+```
+User sends message     → Container starts, both DOs billed
+User reads response    → Container WS keeps SessionDO awake
+10 min idle            → Container sleeps, WS closes
+User still on page     → SessionDO hibernates, near-zero cost ✅
+User sends new message → Container restarts, cycle repeats
+```
+
+### Limitation
+
+While the container WebSocket is connected, SessionDO **cannot fully hibernate**:
+
+```typescript
+// This event listener keeps SessionDO awake
+this.containerWs.addEventListener("message", async (event) => {
+    await this.handleContainerMessage(event.data);
+});
+```
+
+The 10-minute container sleep timeout (`sleepAfter: "10m"`) is the key cost optimization - once the container sleeps and closes its WebSocket, SessionDO can hibernate.
+
+### Cost Comparison
+
+| Scenario | Without Hibernation | With Current Design |
+|----------|---------------------|---------------------|
+| User actively chatting | Billed | Billed |
+| User reading (< 10min) | Billed | Billed |
+| User idle (> 10min) | **Billed** | **Near-zero** ✅ |
+| Tab open overnight | **Very expensive** | **Cheap** ✅ |
 
 ---
 
@@ -445,67 +568,100 @@ const claudeQuery = query({
 ## Sequence Diagram
 
 ```
-Browser          Sandbox Worker      SessionDO           Container
-   │                   │                │                    │
-   │  GET /ws/v2       │                │                    │
-   │──────────────────►│                │                    │
-   │                   │  Verify JWT    │                    │
-   │                   │  Forward       │                    │
-   │                   │───────────────►│                    │
-   │                   │                │  Accept WS         │
-   │◄──────────────────┼────────────────│  (Hibernation)     │
-   │  101 Upgrade      │                │                    │
-   │                   │                │                    │
-   │  {type:"start"}   │                │                    │
-   │───────────────────┼───────────────►│                    │
-   │                   │                │  startContainer()  │
-   │                   │                │  - Mount R2        │
-   │                   │                │  - Restore session │
-   │                   │                │  - Start process   │
-   │                   │                │  - wsConnect()     │
-   │                   │                │───────────────────►│
-   │                   │                │                    │ Accept WS
-   │◄──────────────────┼────────────────│ {connecting}       │
-   │◄──────────────────┼────────────────│ {connected}        │
-   │                   │                │  {type:"start"}    │
-   │                   │                │───────────────────►│
-   │                   │                │                    │
-   │  {type:"message"} │                │                    │
-   │───────────────────┼───────────────►│                    │
-   │                   │                │  Persist user msg  │
-   │                   │                │───────────────────►│
-   │                   │                │                    │ Claude SDK
-   │                   │                │                    │ processes
-   │                   │                │  {sdk_message}     │
-   │◄──────────────────┼────────────────│◄───────────────────│
-   │                   │                │                    │
-   │                   │                │  {type:"done"}     │
-   │                   │                │◄───────────────────│
-   │                   │                │  Persist asst msg  │
-   │                   │                │  Sync to R2        │
-   │◄──────────────────┼────────────────│ {done, messageId}  │
-   │                   │                │                    │
+Browser          Worker        SessionDO        Sandbox DO       Container
+   │               │               │                │                │
+   │  GET /ws/v2   │               │                │                │
+   │──────────────►│               │                │                │
+   │               │  Verify JWT   │                │                │
+   │               │  Forward      │                │                │
+   │               │──────────────►│                │                │
+   │               │               │  Accept WS     │                │
+   │◄──────────────┼───────────────│  (Hibernation) │                │
+   │  101 Upgrade  │               │                │                │
+   │               │               │                │                │
+   │ {type:"start"}│               │                │                │
+   │───────────────┼──────────────►│                │                │
+   │               │               │  getSandbox()  │                │
+   │               │               │───────────────►│                │
+   │               │               │                │  mountBucket() │
+   │               │               │                │  (R2 → /persistent)
+   │               │               │                │  startProcess()│
+   │               │               │                │───────────────►│
+   │               │               │                │                │ Start
+   │               │               │  wsConnect()   │                │
+   │               │               │───────────────►│                │
+   │               │               │                │ tunnel to 8080 │
+   │               │               │                │───────────────►│
+   │               │               │◄───────────────│                │ WS ready
+   │◄──────────────┼───────────────│ {connecting}   │                │
+   │◄──────────────┼───────────────│ {connected}    │                │
+   │               │               │ {type:"start"} │                │
+   │               │               │────────────────┼───────────────►│
+   │               │               │                │                │
+   │{type:"message"}               │                │                │
+   │───────────────┼──────────────►│                │                │
+   │               │               │  Persist user  │                │
+   │               │               │────────────────┼───────────────►│
+   │               │               │                │                │ Claude
+   │               │               │                │                │ processes
+   │               │               │  {sdk_message} │                │
+   │◄──────────────┼───────────────│◄───────────────┼────────────────│
+   │               │               │                │                │
+   │               │               │  {type:"done"} │                │
+   │               │               │◄───────────────┼────────────────│
+   │               │               │  Persist asst  │                │
+   │               │               │  exec(rsync)   │                │
+   │               │               │───────────────►│                │
+   │               │               │                │ sync to R2     │
+   │◄──────────────┼───────────────│ {done,msgId}   │                │
+   │               │               │                │                │
 ```
 
 ---
 
 ## Key Files
 
-| Component | File                                                 | Purpose              |
-| --------- | ---------------------------------------------------- | -------------------- |
-| Web       | `apps/web/src/components/chat/chat-detail.tsx`       | WebSocket client     |
-| Web       | `apps/web/src/lib/api/chat.ts`                       | API helpers & token  |
-| Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`            | Route handler        |
-| Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`     | Durable Object       |
-| Sandbox   | `apps/sandbox/src/services/r2-sync.ts`               | R2 persistence       |
-| Container | `apps/container/src/index.ts`                        | Server entry         |
-| Container | `apps/container/src/handlers/message-handlers.ts`    | Message dispatch     |
-| Container | `apps/container/src/handlers/claude-processor.ts`    | SDK processing       |
-| Container | `apps/container/src/session/message-queue.ts`        | Async message queue  |
+| Component | File                                                 | Purpose                    |
+| --------- | ---------------------------------------------------- | -------------------------- |
+| Web       | `apps/web/src/components/chat/chat-detail.tsx`       | WebSocket client           |
+| Web       | `apps/web/src/lib/api/chat.ts`                       | API helpers & token        |
+| Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`            | Route handler              |
+| Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`     | SessionDO (custom)         |
+| Sandbox   | `@cloudflare/containers`                             | Sandbox DO (CF built-in)   |
+| Sandbox   | `apps/sandbox/src/services/r2-sync.ts`               | R2 sync commands           |
+| Container | `apps/container/src/index.ts`                        | Server entry               |
+| Container | `apps/container/src/handlers/message-handlers.ts`    | Message dispatch           |
+| Container | `apps/container/src/handlers/claude-processor.ts`    | SDK processing             |
+| Container | `apps/container/src/session/message-queue.ts`        | Async message queue        |
 
 ---
 
 ## Configuration
+
+### Wrangler Bindings
+
+```jsonc
+{
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "SessionDO",      // Your custom DO
+				"class_name": "SessionDO"
+			},
+			{
+				"name": "Sandbox",        // Cloudflare's Container DO
+				"class_name": "Sandbox"   // From @cloudflare/containers
+			}
+		]
+	},
+	"r2_buckets": [
+		{
+			"binding": "R2",
+			"bucket_name": "claude-sessions"
+		}
+	]
+}
+```
 
 ### SessionDO Config
 
@@ -530,7 +686,8 @@ R2_CONFIG = {
 ### Authentication Chain
 
 1. **Browser → API**: Session cookie (from login)
-2. **Browser → Sandbox**: Short-lived JWT token in query params
+2. **Browser → Sandbox Worker**: Short-lived JWT token in query params
 3. **Sandbox Worker**: `verifyJWT(token, JWT_SECRET)`
-4. **Sandbox → Container**: Internal routing (no additional auth)
-5. **SessionDO → API**: `X-Service-Token` header for message persistence
+4. **SessionDO → Sandbox DO**: Internal (same Worker, no auth needed)
+5. **Sandbox DO → Container**: Internal routing (Cloudflare network)
+6. **SessionDO → API**: `X-Service-Token` header for message persistence
