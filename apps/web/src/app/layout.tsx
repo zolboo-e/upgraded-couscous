@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 
-import { Header } from "@/components/layout/header";
-
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,10 +14,7 @@ export default function RootLayout({
 }>): React.ReactElement {
   return (
     <html lang="en">
-      <body className="antialiased">
-        <Header />
-        <main>{children}</main>
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
