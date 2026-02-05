@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
 import {
   type ChatSession,
   createChatSession,
@@ -14,7 +13,6 @@ import { ChatListItem } from "./chat-list-item";
 import { NewChatButton } from "./new-chat-button";
 
 export function ChatList(): React.ReactElement {
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,15 +32,8 @@ export function ChatList(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    if (!isAuthLoading && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    if (isAuthenticated) {
-      fetchSessions();
-    }
-  }, [isAuthenticated, isAuthLoading, router, fetchSessions]);
+    fetchSessions();
+  }, [fetchSessions]);
 
   const handleDelete = async (id: string): Promise<void> => {
     await deleteChatSession(id);
@@ -59,7 +50,7 @@ export function ChatList(): React.ReactElement {
     }
   };
 
-  if (isAuthLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />

@@ -1,8 +1,8 @@
 "use client";
 
 import { Button, type ButtonProps } from "@repo/ui";
-import { useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
+import { useTransition } from "react";
+import { logout } from "@/lib/actions/auth";
 
 type LogoutButtonProps = Omit<ButtonProps, "onClick" | "disabled">;
 
@@ -12,16 +12,12 @@ export function LogoutButton({
   className,
   ...props
 }: LogoutButtonProps): React.ReactElement {
-  const { logout } = useAuth();
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  const handleLogout = async (): Promise<void> => {
-    setIsLoggingOut(true);
-    try {
+  const handleLogout = (): void => {
+    startTransition(async () => {
       await logout();
-    } finally {
-      setIsLoggingOut(false);
-    }
+    });
   };
 
   return (
@@ -30,10 +26,10 @@ export function LogoutButton({
       size={size}
       className={className}
       onClick={handleLogout}
-      disabled={isLoggingOut}
+      disabled={isPending}
       {...props}
     >
-      {isLoggingOut ? "Signing out..." : "Sign out"}
+      {isPending ? "Signing out..." : "Sign out"}
     </Button>
   );
 }

@@ -2,16 +2,13 @@
 
 import { Button, Input, Label } from "@repo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
-
-import { useAuth } from "@/contexts/auth-context";
-import { loginUser } from "@/lib/api/auth";
+import { login } from "@/lib/actions/auth";
 import { loginSchema } from "@/lib/validations/auth";
 
 export function LoginForm(): React.ReactElement {
-  const router = useRouter();
-  const { setUser } = useAuth();
+  const searchParams = useSearchParams();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm({
@@ -22,9 +19,8 @@ export function LoginForm(): React.ReactElement {
     onSubmit: async ({ value }) => {
       setServerError(null);
       try {
-        const result = await loginUser(value);
-        setUser(result.data.user);
-        router.push("/");
+        const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
+        await login(value, callbackUrl);
       } catch (error) {
         setServerError(error instanceof Error ? error.message : "Login failed");
       }

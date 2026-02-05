@@ -1,12 +1,10 @@
-"use client";
-
 import { Button } from "@repo/ui";
 import Link from "next/link";
 import { LogoutButton } from "@/components/auth/logout-button";
-import { useAuth } from "@/contexts/auth-context";
+import { getCurrentUser } from "@/lib/actions/auth";
 
-export function Header(): React.ReactElement {
-  const { user, isLoading, isAuthenticated } = useAuth();
+export async function Header(): Promise<React.ReactElement> {
+  const user = await getCurrentUser();
 
   return (
     <header className="border-b bg-background">
@@ -16,14 +14,12 @@ export function Header(): React.ReactElement {
         </Link>
 
         <nav className="flex items-center gap-4">
-          {isLoading ? (
-            <div className="h-10 w-24 animate-pulse rounded bg-muted" />
-          ) : isAuthenticated ? (
+          {user ? (
             <div className="flex items-center gap-4">
               <Link href="/chats" className="text-sm hover:text-primary">
                 Chats
               </Link>
-              <span className="text-sm text-muted-foreground">{user?.name ?? user?.email}</span>
+              <span className="text-sm text-muted-foreground">{user.name ?? user.email}</span>
               <LogoutButton />
             </div>
           ) : (

@@ -1,13 +1,11 @@
 import type { Context, Next } from "hono";
-import { getCookie } from "hono/cookie";
 import { InvalidSessionError } from "../errors/auth.errors.js";
 import type { AuthService } from "../services/auth.service.js";
 
-const SESSION_COOKIE_NAME = "session";
-
 export function createAuthMiddleware(authService: AuthService) {
   return async function authMiddleware(c: Context, next: Next): Promise<void> {
-    const sessionToken = getCookie(c, SESSION_COOKIE_NAME);
+    const authHeader = c.req.header("Authorization");
+    const sessionToken = authHeader?.replace("Bearer ", "");
 
     if (!sessionToken) {
       throw new InvalidSessionError();

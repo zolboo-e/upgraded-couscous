@@ -2,16 +2,13 @@
 
 import { Button, Input, Label } from "@repo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
-
-import { useAuth } from "@/contexts/auth-context";
-import { registerUser } from "@/lib/api/auth";
+import { register } from "@/lib/actions/auth";
 import { registerSchema } from "@/lib/validations/auth";
 
 export function RegisterForm(): React.ReactElement {
-  const router = useRouter();
-  const { setUser } = useAuth();
+  const searchParams = useSearchParams();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm({
@@ -23,13 +20,15 @@ export function RegisterForm(): React.ReactElement {
     onSubmit: async ({ value }) => {
       setServerError(null);
       try {
-        const result = await registerUser({
-          email: value.email,
-          password: value.password,
-          name: value.name || undefined,
-        });
-        setUser(result.data.user);
-        router.push("/");
+        const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
+        await register(
+          {
+            email: value.email,
+            password: value.password,
+            name: value.name || undefined,
+          },
+          callbackUrl,
+        );
       } catch (error) {
         setServerError(error instanceof Error ? error.message : "Registration failed");
       }

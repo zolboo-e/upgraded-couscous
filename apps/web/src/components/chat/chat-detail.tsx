@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
 import {
   type ChatMessage as ChatMessageType,
   type ChatSessionWithMessages,
@@ -172,9 +170,6 @@ interface ChatDetailProps {
 }
 
 export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const router = useRouter();
-
   const [session, setSession] = useState<ChatSessionWithMessages | null>(null);
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -199,15 +194,6 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
   }, [messages.length, streamingContent]);
 
   useEffect(() => {
-    if (!isAuthLoading && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    if (!isAuthenticated) {
-      return;
-    }
-
     const fetchSession = async (): Promise<void> => {
       try {
         const data = await getChatSession(sessionId);
@@ -222,10 +208,10 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
     };
 
     fetchSession();
-  }, [sessionId, isAuthenticated, isAuthLoading, router]);
+  }, [sessionId]);
 
   useEffect(() => {
-    if (!isAuthenticated || isLoading || error) {
+    if (isLoading || error) {
       return;
     }
 
@@ -411,7 +397,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
       setServerStatus("disconnected");
       setAgentStatus("unknown");
     };
-  }, [sessionId, isAuthenticated, isLoading, error, session]);
+  }, [sessionId, isLoading, error, session]);
 
   const handleSendMessage = (content: string): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -490,7 +476,7 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
     setPendingQuestion(null);
   };
 
-  if (isAuthLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />

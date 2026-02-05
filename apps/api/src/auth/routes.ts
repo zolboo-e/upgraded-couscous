@@ -16,7 +16,6 @@ export function createAuthRoutes(handlers: AuthHandlers, authService: AuthServic
   const protectedRoutes = new Hono();
   protectedRoutes.use("*", createAuthMiddleware(authService));
 
-  protectedRoutes.post("/logout", handlers.logout);
   protectedRoutes.get("/me", handlers.me);
   protectedRoutes.get("/ws-token", handlers.wsToken);
 
