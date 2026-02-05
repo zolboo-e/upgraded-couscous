@@ -85,6 +85,101 @@ You **cannot** add custom logic to Sandbox DO - it's Cloudflare's code. SessionD
 
 ---
 
+## Resilience Components
+
+SessionDO uses three specialized components for reliable message handling and session persistence:
+
+### SyncManager
+
+Orchestrates R2 synchronization with debouncing and recovery.
+
+**File:** `apps/sandbox/src/durable-objects/sync-manager.ts`
+
+| Feature | Description |
+|---------|-------------|
+| Debounce | Waits 2s after last request before syncing |
+| Max wait | Forces sync after 10s regardless of activity |
+| Retry | Exponential backoff (3 attempts, 500ms base) |
+| Recovery | Persists failed sync state to DO storage |
+| Force sync | Immediate sync on browser disconnect |
+
+**State Machine:**
+
+```
+idle → pending → syncing → flushing → idle
+                    ↓
+                retrying → error (terminal)
+```
+
+**Usage:**
+
+```typescript
+// Request debounced sync (non-blocking)
+this.ctx.waitUntil(this.syncManager.requestSync());
+
+// Force immediate sync (on disconnect)
+this.ctx.waitUntil(this.syncManager.forceSync());
+
+// Attempt recovery from previous failed sync
+const recovered = await this.syncManager.attemptRecovery();
+```
+
+### MessagePersistenceQueue
+
+Ensures ordered, reliable message persistence to the API.
+
+**File:** `apps/sandbox/src/durable-objects/message-persistence-queue.ts`
+
+| Feature | Description |
+|---------|-------------|
+| Ordering | FIFO processing maintains conversation order |
+| Retry | Exponential backoff (3 attempts, 500ms base) |
+| Non-blocking | Uses `ctx.waitUntil()` for async persistence |
+| Tracking | Returns `messageId` for each persisted message |
+
+**Usage:**
+
+```typescript
+// Initialize with session ID
+this.persistenceQueue.initialize(sessionId);
+
+// Enqueue message (non-blocking, returns messageId)
+this.ctx.waitUntil(this.persistenceQueue.enqueue("user", content));
+const messageId = await this.persistenceQueue.enqueue("assistant", content, metadata);
+```
+
+### PendingMessageBuffer
+
+Buffers messages when container is disconnected or sleeping.
+
+**File:** `apps/sandbox/src/durable-objects/pending-message-buffer.ts`
+
+| Feature | Description |
+|---------|-------------|
+| Capacity | Max 100 messages (drops oldest when full) |
+| Expiration | Auto-prunes messages older than 5 minutes |
+| Ordering | Preserves message order for replay |
+| Types | Supports user messages, permission responses, answers |
+
+**Message Lifecycle:**
+
+```
+Browser message → Container disconnected?
+                        │
+        ┌───────────────┴───────────────┐
+        │ No                            │ Yes
+        ▼                               ▼
+Forward to container          Add to PendingMessageBuffer
+                                        │
+                              Trigger container restart
+                                        │
+                              drainPendingMessages()
+                                        │
+                              Forward all to container
+```
+
+---
+
 ## Hibernation API
 
 ### What It Does
@@ -111,6 +206,31 @@ this.ctx.acceptWebSocket(server);         // ✅ Billed per-event (CPU time)
 async webSocketMessage(ws, message) { }   // Called when message arrives
 async webSocketClose(ws) { }              // Called on disconnect
 ```
+
+### Session Recovery with WebSocket Tags
+
+DO state is lost during hibernation. WebSocket tags preserve the session ID:
+
+```typescript
+// On WebSocket accept - store sessionId in tags
+this.ctx.acceptWebSocket(server, [this.sessionId]);
+
+// On wake from hibernation - restore sessionId from tags
+async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
+    this.browserWs = ws;  // Restore WebSocket reference
+
+    // Restore sessionId from tags if lost during hibernation
+    if (!this.sessionId) {
+        const tags = this.ctx.getTags(ws);
+        if (tags.length > 0) {
+            this.sessionId = tags[0];
+        }
+    }
+    // ... handle message
+}
+```
+
+This pattern is used in `webSocketMessage`, `webSocketClose`, and `webSocketError` handlers.
 
 ### Cost Timeline
 
@@ -244,35 +364,48 @@ ws.addEventListener("open", () => {
 
 ### 2.2 DO Receives & Starts Container
 
-**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 125-303)
+**File:** `apps/sandbox/src/durable-objects/session-do.ts`
 
 The `startContainer()` sequence:
 
 ```
-1. Send "connection_status: connecting" to browser
+1. Initialize persistence queue with session ID
            │
-2. Create Sandbox instance (sleepAfter: 10m)
+2. Send "connection_status: connecting" to browser
            │
-3. Set environment variables:
+3. Create Sandbox instance (sleepAfter: 10m)
+           │
+4. Set environment variables:
    • ANTHROPIC_API_KEY
    • AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
    • ENVIRONMENT
            │
-4. [PRODUCTION] Mount R2 bucket at /persistent
+5. [PRODUCTION] Mount R2 bucket at /persistent
+   │   └─► Wait for mount readiness (poll up to 10x @ 500ms)
+   │
+   ├─► Initialize SyncManager with sandbox + DO storage
+   │
+   ├─► Attempt recovery from previous failed sync
+   │   └─► If recovered: send "session_status: sync_recovered"
+   │
    └─► Restore session from R2:
-       rsync /persistent/{sessionId}/.claude → /root/.claude
+       └─► rsync /persistent/{sessionId}/.claude → /root/.claude
            │
-5. Start process: "bun /workspace/dist/index.js"
+6. Start process: "bun /workspace/dist/index.js"
            │
-6. Wait for port 8080 (health check at /health, timeout 30s)
+7. Wait for port 8080 (health check at /health, timeout 30s)
            │
-7. Create WebSocket to container:
+8. Create WebSocket to container:
    const wsResponse = await this.sandbox.wsConnect(request, 8080);
    this.containerWs = wsResponse.webSocket;
            │
-8. Send "connection_status: connected" to browser
+9. Send "connection_status: connected" to browser
            │
-9. Forward "start" message to container
+10. Forward "start" message to container
+           │
+11. Drain pending messages (if any queued during container sleep)
+           │
+12. Keep DO alive while container connected via ctx.waitUntil()
 ```
 
 ---
@@ -281,7 +414,7 @@ The `startContainer()` sequence:
 
 ### 3.1 User Message Flow (Browser → Container)
 
-**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 76-106)
+**File:** `apps/sandbox/src/durable-objects/session-do.ts`
 
 ```
 Browser sends: { type: "message", content: "Hello" }
@@ -289,10 +422,35 @@ Browser sends: { type: "message", content: "Hello" }
       ▼
 SessionDO.webSocketMessage()
       │
-      ├─► Persist to database (user message)
+      ├─► Persist to database via MessagePersistenceQueue (non-blocking)
       │
-      └─► Forward to container: this.containerWs.send(msg)
+      └─► Container connected?
+              │
+      ┌───────┴───────┐
+      │ Yes           │ No
+      ▼               ▼
+Forward to      Queue in PendingMessageBuffer
+container             │
+                Trigger startContainer()
+                      │
+                drainPendingMessages()
 ```
+
+**Container Sleep Handling:**
+
+When the container has slept (10min idle timeout), messages are queued and the container is restarted:
+
+```typescript
+if (this.containerWs?.readyState === WebSocket.OPEN) {
+    this.containerWs.send(msg);
+} else {
+    // Container has slept - queue message and restart
+    this.pendingMessages.add(msg, data.type);
+    await this.startContainer({ sessionId: this.sessionId });
+}
+```
+
+This applies to user messages, permission responses, and ask_user answers.
 
 ### 3.2 Container Processing
 
@@ -422,6 +580,7 @@ private async handleContainerMessage(msg: string): Promise<void> {
 | PostgreSQL                         | Messages     | Chat history       |
 | Container `/root/.claude/`         | SDK state    | Active session     |
 | R2 `/persistent/{id}/.claude/`     | SDK state    | Session resumption |
+| DO Storage                         | Sync state   | Failed sync recovery |
 
 ### 4.2 R2 Sync Operations
 
@@ -434,37 +593,78 @@ private async handleContainerMessage(msg: string): Promise<void> {
 /persistent/{sessionId}/.claude/todos     →  /root/.claude/todos
 ```
 
-**Sync (after each response):**
+**Sync (after each response - debounced):**
 
 ```
 /root/.claude/projects  →  /persistent/{sessionId}/.claude/projects
 /root/.claude/todos     →  /persistent/{sessionId}/.claude/todos
 ```
 
-### 4.3 Message Persistence
+### 4.3 Sync Strategy
 
-Messages are persisted to the database via the API:
+Syncing uses the SyncManager for reliability:
+
+```
+Container sends "done" message
+      │
+      ▼
+SyncManager.requestSync() (debounced)
+      │
+      ├─► Wait 2s for more "done" messages (batch)
+      │
+      └─► After 2s quiet OR 10s max wait:
+              │
+              ▼
+          performSync() with retry
+              │
+              ├─► Success: Clear failed sync state
+              │
+              └─► Failure: Persist to DO storage for recovery
+```
+
+**Force Sync on Disconnect:**
 
 ```typescript
-private async persistMessage(
-	role: "user" | "assistant",
-	content: string,
-	metadata?: { tokensUsed?: number; stopReason?: string }
-): Promise<string | null> {
-	const response = await fetch(
-		`${this.env.API_BASE_URL}/internal/sessions/${this.sessionId}/messages`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"X-Service-Token": this.env.INTERNAL_API_TOKEN,
-			},
-			body: JSON.stringify({ role, type: "message", content, metadata }),
-		}
-	);
-	return response.json().then((r) => r.messageId);
+// In webSocketClose handler
+if (isProduction(this.env) && this.sandbox && this.sessionId) {
+    this.ctx.waitUntil(this.syncManager.forceSync());
 }
 ```
+
+### 4.4 Message Persistence
+
+Messages are persisted via MessagePersistenceQueue for ordered delivery:
+
+```typescript
+// User message (non-blocking)
+this.ctx.waitUntil(this.persistenceQueue.enqueue("user", content));
+
+// Assistant message (returns messageId for browser)
+const messageId = await this.persistenceQueue.enqueue(
+    "assistant",
+    this.assistantContent,
+    data.metadata
+);
+```
+
+The queue ensures:
+- **Ordering**: Messages persist in conversation order (FIFO)
+- **Reliability**: Retry with exponential backoff (3 attempts)
+- **Non-blocking**: Uses `ctx.waitUntil()` for async operation
+
+### 4.5 Failed Sync Recovery
+
+If a sync fails after all retries, the state is persisted to DO storage:
+
+```typescript
+// On next container start
+const recovered = await this.syncManager.attemptRecovery();
+if (recovered) {
+    this.sendSessionStatus("sync_recovered");
+}
+```
+
+This ensures session state is eventually synchronized even after failures.
 
 ---
 
@@ -557,15 +757,30 @@ const claudeQuery = query({
 | `stream_end`              | End streaming response                   |
 | `done`                    | Response complete (includes messageId)   |
 | `error`                   | Error message                            |
-| `connection_status`       | Sandbox status                           |
-| `session_status`          | Restore progress                         |
+| `connection_status`       | Sandbox status (`connecting`, `connected`, `disconnected`) |
+| `session_status`          | Restore/sync progress (see table below)  |
 | `tool_permission_request` | Request permission for tool              |
 | `ask_user_question`       | Claude asking user a question            |
 | `memory_stats`            | Container memory usage                   |
 
+### Session Status Values
+
+The `session_status` message reports restore and sync progress:
+
+| Status | Description |
+|--------|-------------|
+| `restore_started` | Beginning R2 restore process |
+| `restoring` | Rsync restore in progress |
+| `restored` | Successfully restored from R2 |
+| `restore_skipped` | No R2 data or development mode |
+| `restore_failed` | Restore operation failed |
+| `sync_recovered` | Recovered from previous failed sync |
+
 ---
 
 ## Sequence Diagram
+
+### Normal Flow
 
 ```
 Browser          Worker        SessionDO        Sandbox DO       Container
@@ -576,7 +791,7 @@ Browser          Worker        SessionDO        Sandbox DO       Container
    │               │  Forward      │                │                │
    │               │──────────────►│                │                │
    │               │               │  Accept WS     │                │
-   │◄──────────────┼───────────────│  (Hibernation) │                │
+   │◄──────────────┼───────────────│  (+ tags)      │                │
    │  101 Upgrade  │               │                │                │
    │               │               │                │                │
    │ {type:"start"}│               │                │                │
@@ -584,14 +799,17 @@ Browser          Worker        SessionDO        Sandbox DO       Container
    │               │               │  getSandbox()  │                │
    │               │               │───────────────►│                │
    │               │               │                │  mountBucket() │
-   │               │               │                │  (R2 → /persistent)
+   │               │               │                │  waitForMount()│
+   │               │               │  attemptRecovery()              │
+   │◄──────────────┼───────────────│ {sync_recovered?}              │
+   │               │               │  restoreFromR2()               │
+   │◄──────────────┼───────────────│ {restoring}    │                │
+   │◄──────────────┼───────────────│ {restored}     │                │
    │               │               │                │  startProcess()│
    │               │               │                │───────────────►│
-   │               │               │                │                │ Start
    │               │               │  wsConnect()   │                │
    │               │               │───────────────►│                │
    │               │               │                │ tunnel to 8080 │
-   │               │               │                │───────────────►│
    │               │               │◄───────────────│                │ WS ready
    │◄──────────────┼───────────────│ {connecting}   │                │
    │◄──────────────┼───────────────│ {connected}    │                │
@@ -600,7 +818,7 @@ Browser          Worker        SessionDO        Sandbox DO       Container
    │               │               │                │                │
    │{type:"message"}               │                │                │
    │───────────────┼──────────────►│                │                │
-   │               │               │  Persist user  │                │
+   │               │               │  Queue persist │                │
    │               │               │────────────────┼───────────────►│
    │               │               │                │                │ Claude
    │               │               │                │                │ processes
@@ -610,11 +828,56 @@ Browser          Worker        SessionDO        Sandbox DO       Container
    │               │               │  {type:"done"} │                │
    │               │               │◄───────────────┼────────────────│
    │               │               │  Persist asst  │                │
-   │               │               │  exec(rsync)   │                │
-   │               │               │───────────────►│                │
-   │               │               │                │ sync to R2     │
+   │               │               │  requestSync() │                │
+   │               │               │  (debounced)   │                │
    │◄──────────────┼───────────────│ {done,msgId}   │                │
    │               │               │                │                │
+```
+
+### Container Sleep & Reconnection Flow
+
+```
+Browser          SessionDO        Sandbox DO       Container
+   │                │                │                │
+   │ (Container sleeps after 10min idle)             │
+   │                │                │◄───────────────│ sleep
+   │                │◄───────────────│ WS close       │
+   │◄───────────────│ {disconnected} │                │
+   │                │                │                │
+   │ {type:"message"}               │                │
+   │───────────────►│                │                │
+   │                │ Queue message  │                │
+   │                │ (PendingBuffer)│                │
+   │                │                │                │
+   │                │ startContainer()               │
+   │                │───────────────►│                │
+   │                │                │  wake/restart │
+   │                │                │───────────────►│
+   │                │  wsConnect()   │                │
+   │                │───────────────►│                │
+   │                │◄───────────────│                │ WS ready
+   │◄───────────────│ {connected}    │                │
+   │                │                │                │
+   │                │ drainPending() │                │
+   │                │────────────────┼───────────────►│ queued msg
+   │                │                │                │
+```
+
+### Browser Disconnect Flow
+
+```
+Browser          SessionDO        Sandbox DO       Container
+   │                │                │                │
+   │ close WS       │                │                │
+   │───────────────►│                │                │
+   │                │ webSocketClose()               │
+   │                │ forceSync()    │                │
+   │                │───────────────►│                │
+   │                │                │ rsync to R2   │
+   │                │                │                │
+   │                │ browserWs=null │                │
+   │                │ (hibernates)   │                │
+   │                │                │                │
 ```
 
 ---
@@ -627,7 +890,10 @@ Browser          Worker        SessionDO        Sandbox DO       Container
 | Web       | `apps/web/src/lib/api/chat.ts`                       | API helpers & token        |
 | Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`            | Route handler              |
 | Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`     | SessionDO (custom)         |
-| Sandbox   | `@cloudflare/containers`                             | Sandbox DO (CF built-in)   |
+| Sandbox   | `apps/sandbox/src/durable-objects/sync-manager.ts`   | Debounced R2 sync with recovery |
+| Sandbox   | `apps/sandbox/src/durable-objects/message-persistence-queue.ts` | Ordered message persistence |
+| Sandbox   | `apps/sandbox/src/durable-objects/pending-message-buffer.ts` | Message buffering during sleep |
+| Sandbox   | `@cloudflare/sandbox`                                | Sandbox DO (CF built-in)   |
 | Sandbox   | `apps/sandbox/src/services/r2-sync.ts`               | R2 sync commands           |
 | Container | `apps/container/src/index.ts`                        | Server entry               |
 | Container | `apps/container/src/handlers/message-handlers.ts`    | Message dispatch           |
