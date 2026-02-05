@@ -1,0 +1,536 @@
+# WebSocket Connection Lifecycle
+
+This document details the WebSocket connection lifecycle between the three components: Web (Next.js), Durable Object (Cloudflare), and Container (Claude Agent SDK).
+
+## Architecture Overview
+
+```
+┌─────────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+│   BROWSER       │     │   DURABLE OBJECT    │     │   CONTAINER     │
+│   (Next.js)     │────▶│   (SessionDO)       │────▶│   (Bun/Node)    │
+│                 │◀────│                     │◀────│                 │
+└─────────────────┘     └─────────────────────┘     └─────────────────┘
+        │                       │                          │
+   WebSocket #1            WebSocket #2              WebSocket Server
+   (Browser WS)            (Container WS)            (Port 8080)
+```
+
+The system uses a three-tier WebSocket architecture:
+
+1. **Web** (Next.js frontend) - User interface and WebSocket client
+2. **DO** (Durable Object in Cloudflare Workers) - Connection manager, message relay, persistence
+3. **Container** (Claude Agent SDK server) - AI processing with Claude
+
+---
+
+## Phase 1: Connection Initiation (Web → DO)
+
+### 1.1 Token Acquisition
+
+The browser first requests a short-lived JWT token for authentication.
+
+**File:** `apps/web/src/lib/api/chat.ts`
+
+```typescript
+export async function getWsToken(): Promise<string | null> {
+	const response = await fetch(`${API_BASE_URL}/auth/ws-token`, {
+		method: "GET",
+		credentials: "include",
+	});
+	const data = await response.json();
+	return data.data.token;
+}
+```
+
+### 1.2 WebSocket Creation
+
+**File:** `apps/web/src/components/chat/chat-detail.tsx` (lines 232-246)
+
+```typescript
+const connectWebSocket = async (): Promise<void> => {
+	const token = await getWsToken();
+	const wsUrl = `${SANDBOX_WS_URL}/ws/v2?sessionId=${sessionId}&token=${token}`;
+	const ws = new WebSocket(wsUrl);
+	wsRef.current = ws;
+	setServerStatus("connecting");
+};
+```
+
+### 1.3 Route Handler (Cloudflare Worker)
+
+The Worker verifies the JWT and forwards to the Durable Object.
+
+**File:** `apps/sandbox/src/routes/websocket-v2.ts` (lines 14-68)
+
+```typescript
+export const websocketV2Route = new Hono<AppEnv>().get("/", async (c) => {
+	// JWT Token Validation
+	const token = extractToken(c.req.raw);
+	const user = await verifyJWT(token, c.env.JWT_SECRET);
+
+	// Get SessionDO Instance
+	const sessionId = c.req.query("sessionId");
+	const doId = c.env.SessionDO.idFromName(sessionId);
+	const sessionDo = c.env.SessionDO.get(doId);
+
+	// Forward to Durable Object
+	return sessionDo.fetch(doRequest);
+});
+```
+
+### 1.4 DO WebSocket Acceptance
+
+The Durable Object accepts the WebSocket using the Hibernation API for cost efficiency.
+
+**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 58-70)
+
+```typescript
+private handleWebSocketUpgrade(url: URL): Response {
+	this.sessionId = url.searchParams.get("sessionId") ?? "default";
+
+	const pair = new WebSocketPair();
+	const [client, server] = Object.values(pair);
+
+	this.ctx.acceptWebSocket(server); // Hibernation API
+	this.browserWs = server;
+
+	return new Response(null, { status: 101, webSocket: client });
+}
+```
+
+---
+
+## Phase 2: Container Startup (DO → Container)
+
+### 2.1 Browser Sends "start" Message
+
+**File:** `apps/web/src/components/chat/chat-detail.tsx` (lines 252-262)
+
+```typescript
+ws.addEventListener("open", () => {
+	setServerStatus("connected");
+	ws.send(
+		JSON.stringify({
+			type: "start",
+			sessionId,
+			...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
+		})
+	);
+});
+```
+
+### 2.2 DO Receives & Starts Container
+
+**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 125-303)
+
+The `startContainer()` sequence:
+
+```
+1. Send "connection_status: connecting" to browser
+           │
+2. Create Sandbox instance (sleepAfter: 10m)
+           │
+3. Set environment variables:
+   • ANTHROPIC_API_KEY
+   • AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+   • ENVIRONMENT
+           │
+4. [PRODUCTION] Mount R2 bucket at /persistent
+   └─► Restore session from R2:
+       rsync /persistent/{sessionId}/.claude → /root/.claude
+           │
+5. Start process: "bun /workspace/dist/index.js"
+           │
+6. Wait for port 8080 (health check at /health, timeout 30s)
+           │
+7. Create WebSocket to container:
+   const wsResponse = await this.sandbox.wsConnect(request, 8080);
+   this.containerWs = wsResponse.webSocket;
+           │
+8. Send "connection_status: connected" to browser
+           │
+9. Forward "start" message to container
+```
+
+---
+
+## Phase 3: Message Relay (Bidirectional)
+
+### 3.1 User Message Flow (Browser → Container)
+
+**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 76-106)
+
+```
+Browser sends: { type: "message", content: "Hello" }
+      │
+      ▼
+SessionDO.webSocketMessage()
+      │
+      ├─► Persist to database (user message)
+      │
+      └─► Forward to container: this.containerWs.send(msg)
+```
+
+### 3.2 Container Processing
+
+**File:** `apps/container/src/handlers/message-handlers.ts` (lines 98-118)
+
+```typescript
+export function handleUserMessage(ws: WebSocket, message: IncomingMessage, deps: MessageHandlerDeps): void {
+	const { sessions, sessionQueue, logger } = deps;
+
+	const session = sessions.get(ws);
+	if (!session) {
+		sendMessage(ws, { type: "error", message: "Session not initialized" }, logger);
+		return;
+	}
+
+	if (message.content) {
+		sessionQueue.enqueue(ws, createUserMessage(message.content, session.sessionId ?? ""));
+	}
+}
+```
+
+The message queue feeds an async generator that the Claude SDK consumes:
+
+**File:** `apps/container/src/session/message-queue.ts`
+
+```typescript
+// Consumer: Infinite async generator
+async *consume(ws: WebSocket): AsyncGenerator<SDKUserMessage> {
+	while (!this.closed.has(ws)) {
+		const queue = this.queues.get(ws);
+		const msg = queue?.shift();
+		if (msg !== undefined) {
+			yield msg;
+		} else {
+			// Wait for next message
+			const nextMsg = await new Promise<SDKUserMessage>((resolve) => {
+				this.resolvers.set(ws, resolve);
+			});
+			yield nextMsg;
+		}
+	}
+}
+```
+
+### 3.3 Response Flow (Container → Browser)
+
+**File:** `apps/container/src/handlers/claude-processor.ts` (lines 10-62)
+
+```typescript
+export async function processClaudeMessages(
+	ws: WebSocket,
+	claudeQuery: AsyncIterable<SDKMessage>,
+	sessionId: string | null,
+	logger: Logger,
+	syncSession: (sessionId: string | null) => Promise<void>
+): Promise<void> {
+	for await (const message of claudeQuery) {
+		if (ws.readyState !== WebSocket.OPEN) {
+			break;
+		}
+
+		// Forward raw SDK message for real-time display
+		sendMessage(ws, { type: "sdk_message", message }, logger);
+
+		// Handle result message for completion
+		if (message.type === "result") {
+			await syncSession(sessionId);
+			sendMessage(ws, {
+				type: "done",
+				metadata: {
+					tokensUsed: (message.usage?.input_tokens ?? 0) + (message.usage?.output_tokens ?? 0),
+					stopReason: message.subtype,
+				},
+			}, logger);
+		}
+	}
+}
+```
+
+### 3.4 DO Message Relay
+
+**File:** `apps/sandbox/src/durable-objects/session-do.ts` (lines 305-384)
+
+```typescript
+private async handleContainerMessage(msg: string): Promise<void> {
+	const data = JSON.parse(msg);
+
+	// Accumulate assistant content for persistence
+	if (data.type === "sdk_message" && data.message?.type === "assistant") {
+		const content = data.message.message?.content;
+		this.assistantContent += textContent;
+	}
+
+	// On completion, persist and send messageId
+	if (data.type === "done") {
+		if (this.assistantContent) {
+			const messageId = await this.persistMessage("assistant", this.assistantContent, data.metadata);
+			this.browserWs.send(JSON.stringify({
+				type: "done",
+				messageId,
+				metadata: data.metadata,
+			}));
+		}
+
+		// Non-blocking R2 sync in production
+		if (isProduction(this.env) && this.sandbox && this.sessionId) {
+			this.ctx.waitUntil(this.syncToR2());
+		}
+
+		this.assistantContent = "";
+		return;
+	}
+
+	// Forward all other messages to browser
+	this.browserWs.send(msg);
+}
+```
+
+---
+
+## Phase 4: Session Persistence
+
+### 4.1 Storage Locations
+
+| Location                           | Data         | Purpose            |
+| ---------------------------------- | ------------ | ------------------ |
+| PostgreSQL                         | Messages     | Chat history       |
+| Container `/root/.claude/`         | SDK state    | Active session     |
+| R2 `/persistent/{id}/.claude/`     | SDK state    | Session resumption |
+
+### 4.2 R2 Sync Operations
+
+**File:** `apps/sandbox/src/services/r2-sync.ts`
+
+**Restore (on container start):**
+
+```
+/persistent/{sessionId}/.claude/projects  →  /root/.claude/projects
+/persistent/{sessionId}/.claude/todos     →  /root/.claude/todos
+```
+
+**Sync (after each response):**
+
+```
+/root/.claude/projects  →  /persistent/{sessionId}/.claude/projects
+/root/.claude/todos     →  /persistent/{sessionId}/.claude/todos
+```
+
+### 4.3 Message Persistence
+
+Messages are persisted to the database via the API:
+
+```typescript
+private async persistMessage(
+	role: "user" | "assistant",
+	content: string,
+	metadata?: { tokensUsed?: number; stopReason?: string }
+): Promise<string | null> {
+	const response = await fetch(
+		`${this.env.API_BASE_URL}/internal/sessions/${this.sessionId}/messages`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Service-Token": this.env.INTERNAL_API_TOKEN,
+			},
+			body: JSON.stringify({ role, type: "message", content, metadata }),
+		}
+	);
+	return response.json().then((r) => r.messageId);
+}
+```
+
+---
+
+## Phase 5: Connection Closure & Reconnection
+
+### 5.1 Browser Disconnect
+
+```
+Browser closes WebSocket
+      │
+      ▼
+SessionDO.webSocketClose()
+      │
+      ├─► this.browserWs = null
+      │
+      └─► Container continues (sleepAfter: 10m idle timeout)
+```
+
+### 5.2 Container Sleep
+
+```
+Container idle for 10 minutes
+      │
+      ▼
+Cloudflare suspends container
+      │
+      └─► Session state preserved in R2
+```
+
+### 5.3 Reconnection Flow
+
+```
+Browser reconnects
+      │
+      ▼
+startContainer()
+      │
+      ├─► Mount R2 bucket
+      │
+      ├─► Restore from R2
+      │
+      └─► query({ resume: sessionId })
+             │
+             └─► Claude SDK loads existing session state
+```
+
+**File:** `apps/container/src/handlers/message-handlers.ts` (lines 21-93)
+
+```typescript
+// Check if session exists on disk
+const sessionExists = message.sessionId
+	? await checkSessionExists(message.sessionId, execFn, logger)
+	: false;
+
+// Start Claude query with session ID and resume flag
+const claudeQuery = query({
+	prompt: promptGenerator,
+	options: {
+		model,
+		systemPrompt: message.systemPrompt,
+		extraArgs: !sessionExists && message.sessionId
+			? { "session-id": message.sessionId } // New session
+			: undefined,
+		resume: sessionExists ? message.sessionId : undefined, // Restore session
+	},
+});
+```
+
+---
+
+## Message Types Reference
+
+### Incoming (Browser → DO → Container)
+
+| Type                  | Description                    |
+| --------------------- | ------------------------------ |
+| `start`               | Initialize session             |
+| `message`             | User chat message              |
+| `permission_response` | Tool permission decision       |
+| `ask_user_answer`     | Answer to Claude's question    |
+| `close`               | Graceful disconnect            |
+
+### Outgoing (Container → DO → Browser)
+
+| Type                      | Description                              |
+| ------------------------- | ---------------------------------------- |
+| `sdk_message`             | Raw Claude SDK messages                  |
+| `stream_start`            | Begin streaming response                 |
+| `chunk`                   | Streaming text chunk                     |
+| `stream_end`              | End streaming response                   |
+| `done`                    | Response complete (includes messageId)   |
+| `error`                   | Error message                            |
+| `connection_status`       | Sandbox status                           |
+| `session_status`          | Restore progress                         |
+| `tool_permission_request` | Request permission for tool              |
+| `ask_user_question`       | Claude asking user a question            |
+| `memory_stats`            | Container memory usage                   |
+
+---
+
+## Sequence Diagram
+
+```
+Browser          Sandbox Worker      SessionDO           Container
+   │                   │                │                    │
+   │  GET /ws/v2       │                │                    │
+   │──────────────────►│                │                    │
+   │                   │  Verify JWT    │                    │
+   │                   │  Forward       │                    │
+   │                   │───────────────►│                    │
+   │                   │                │  Accept WS         │
+   │◄──────────────────┼────────────────│  (Hibernation)     │
+   │  101 Upgrade      │                │                    │
+   │                   │                │                    │
+   │  {type:"start"}   │                │                    │
+   │───────────────────┼───────────────►│                    │
+   │                   │                │  startContainer()  │
+   │                   │                │  - Mount R2        │
+   │                   │                │  - Restore session │
+   │                   │                │  - Start process   │
+   │                   │                │  - wsConnect()     │
+   │                   │                │───────────────────►│
+   │                   │                │                    │ Accept WS
+   │◄──────────────────┼────────────────│ {connecting}       │
+   │◄──────────────────┼────────────────│ {connected}        │
+   │                   │                │  {type:"start"}    │
+   │                   │                │───────────────────►│
+   │                   │                │                    │
+   │  {type:"message"} │                │                    │
+   │───────────────────┼───────────────►│                    │
+   │                   │                │  Persist user msg  │
+   │                   │                │───────────────────►│
+   │                   │                │                    │ Claude SDK
+   │                   │                │                    │ processes
+   │                   │                │  {sdk_message}     │
+   │◄──────────────────┼────────────────│◄───────────────────│
+   │                   │                │                    │
+   │                   │                │  {type:"done"}     │
+   │                   │                │◄───────────────────│
+   │                   │                │  Persist asst msg  │
+   │                   │                │  Sync to R2        │
+   │◄──────────────────┼────────────────│ {done, messageId}  │
+   │                   │                │                    │
+```
+
+---
+
+## Key Files
+
+| Component | File                                                 | Purpose              |
+| --------- | ---------------------------------------------------- | -------------------- |
+| Web       | `apps/web/src/components/chat/chat-detail.tsx`       | WebSocket client     |
+| Web       | `apps/web/src/lib/api/chat.ts`                       | API helpers & token  |
+| Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`            | Route handler        |
+| Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`     | Durable Object       |
+| Sandbox   | `apps/sandbox/src/services/r2-sync.ts`               | R2 persistence       |
+| Container | `apps/container/src/index.ts`                        | Server entry         |
+| Container | `apps/container/src/handlers/message-handlers.ts`    | Message dispatch     |
+| Container | `apps/container/src/handlers/claude-processor.ts`    | SDK processing       |
+| Container | `apps/container/src/session/message-queue.ts`        | Async message queue  |
+
+---
+
+## Configuration
+
+### SessionDO Config
+
+```typescript
+SANDBOX_CONFIG = {
+	sleepAfter: "10m" // Auto-sleep after idle
+};
+
+CONTAINER_CONFIG = {
+	port: 8080,
+	healthPath: "/health",
+	startTimeout: 30000,
+	entrypoint: "bun /workspace/dist/index.js"
+};
+
+R2_CONFIG = {
+	bucketName: "claude-sessions",
+	mountPath: "/persistent"
+};
+```
+
+### Authentication Chain
+
+1. **Browser → API**: Session cookie (from login)
+2. **Browser → Sandbox**: Short-lived JWT token in query params
+3. **Sandbox Worker**: `verifyJWT(token, JWT_SECRET)`
+4. **Sandbox → Container**: Internal routing (no additional auth)
+5. **SessionDO → API**: `X-Service-Token` header for message persistence

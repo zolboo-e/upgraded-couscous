@@ -63,3 +63,7 @@ Sessions persist across container restarts via R2:
 1. **First connection**: Creates session with database UUID as Claude session ID
 2. **After response**: Syncs `~/.claude` to R2 bucket (`/persistent/${sessionId}/.claude`)
 3. **Reconnection**: Restores from R2, uses `resume` option to continue session
+
+## Documentation
+
+- [WebSocket Lifecycle](docs/websocket-lifecycle.md) - Detailed connection lifecycle between Web, Durable Object, and Container
