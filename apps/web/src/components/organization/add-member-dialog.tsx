@@ -16,8 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/ui";
-import { useState, useTransition } from "react";
+import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { addMember } from "@/lib/actions/organization";
+import { addMemberSchema } from "@/lib/validations/organization";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -25,48 +27,37 @@ interface AddMemberDialogProps {
 }
 
 export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): React.ReactElement {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const form = useForm({
+    defaultValues: {
+      email: "",
+      name: "",
+      password: "",
+      role: "member" as "admin" | "member",
+    },
+    onSubmit: async ({ value }) => {
+      setServerError(null);
+      const result = await addMember(
+        value.email.trim(),
+        value.name.trim() || undefined,
+        value.role,
+        value.password,
+      );
+      if (result.success) {
+        form.reset();
+        setServerError(null);
+        onOpenChange(false);
+      } else {
+        setServerError(result.error ?? "Failed to add member");
+      }
+    },
+  });
 
   function handleClose(): void {
-    setEmail("");
-    setName("");
-    setPassword("");
-    setRole("member");
-    setError(null);
+    form.reset();
+    setServerError(null);
     onOpenChange(false);
-  }
-
-  function handleSubmit(e: React.FormEvent): void {
-    e.preventDefault();
-
-    if (!email.trim()) {
-      setError("Email is required");
-      return;
-    }
-
-    if (!password) {
-      setError("Password is required");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await addMember(email.trim(), name.trim() || undefined, role, password);
-      if (result.success) {
-        handleClose();
-      } else {
-        setError(result.error ?? "Failed to add member");
-      }
-    });
   }
 
   return (
@@ -78,68 +69,145 @@ export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): R
             Add a new member to your organization. A new account will be created for them.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="member@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isPending}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name (optional)</Label>
-              <Input
-                id="name"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isPending}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Temporary Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Min. 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isPending}
-              />
-              <p className="text-xs text-muted-foreground">
-                The member will use this password to log in.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as "admin" | "member")}
-                disabled={isPending}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            <form.Field
+              name="email"
+              validators={{
+                onChange: addMemberSchema.shape.email,
+              }}
+            >
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Email</Label>
+                  <Input
+                    id={field.name}
+                    type="email"
+                    placeholder="member@example.com"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.toString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field
+              name="name"
+              validators={{
+                onChange: addMemberSchema.shape.name,
+              }}
+            >
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Name (optional)</Label>
+                  <Input
+                    id={field.name}
+                    placeholder="John Doe"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.toString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field
+              name="password"
+              validators={{
+                onChange: addMemberSchema.shape.password,
+              }}
+            >
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Temporary Password</Label>
+                  <Input
+                    id={field.name}
+                    type="password"
+                    placeholder="Min. 8 characters"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The member will use this password to log in.
+                  </p>
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.toString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field
+              name="role"
+              validators={{
+                onChange: addMemberSchema.shape.role,
+              }}
+            >
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Role</Label>
+                  <Select
+                    value={field.state.value}
+                    onValueChange={(value) => field.handleChange(value as "admin" | "member")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.toString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            {serverError && <p className="text-sm text-destructive">{serverError}</p>}
           </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending || !email.trim() || !password}>
-              {isPending ? "Adding..." : "Add Member"}
-            </Button>
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleClose}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Adding..." : "Add Member"}
+                  </Button>
+                </>
+              )}
+            </form.Subscribe>
           </DialogFooter>
         </form>
       </DialogContent>

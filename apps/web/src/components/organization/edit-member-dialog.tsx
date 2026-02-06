@@ -15,8 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/ui";
-import { useState, useTransition } from "react";
+import { useForm } from "@tanstack/react-form";
+import { useEffect, useState } from "react";
 import { type OrganizationMember, updateMemberRole } from "@/lib/actions/organization";
+import { editMemberSchema } from "@/lib/validations/organization";
 
 interface EditMemberDialogProps {
   member: OrganizationMember | null;
@@ -29,33 +31,37 @@ export function EditMemberDialog({
   open,
   onOpenChange,
 }: EditMemberDialogProps): React.ReactElement {
-  const [role, setRole] = useState<"admin" | "member">(member?.role ?? "member");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  function handleClose(): void {
-    setError(null);
-    onOpenChange(false);
-  }
+  const form = useForm({
+    defaultValues: {
+      role: (member?.role ?? "member") as "admin" | "member",
+    },
+    onSubmit: async ({ value }) => {
+      if (!member) return;
 
-  function handleSubmit(e: React.FormEvent): void {
-    e.preventDefault();
-
-    if (!member) return;
-
-    startTransition(async () => {
-      const result = await updateMemberRole(member.id, role);
+      setServerError(null);
+      const result = await updateMemberRole(member.id, value.role);
       if (result.success) {
         handleClose();
       } else {
-        setError(result.error ?? "Failed to update role");
+        setServerError(result.error ?? "Failed to update role");
       }
-    });
-  }
+    },
+  });
 
-  // Update role when member changes
-  if (member && role !== member.role && !isPending) {
-    setRole(member.role);
+  const memberId = member?.id;
+  const memberRole = member?.role;
+
+  useEffect(() => {
+    if (memberId && memberRole) {
+      form.reset({ role: memberRole });
+    }
+  }, [memberId, memberRole, form]);
+
+  function handleClose(): void {
+    setServerError(null);
+    onOpenChange(false);
   }
 
   return (
@@ -67,33 +73,65 @@ export function EditMemberDialog({
             Update the role for {member?.user.name ?? member?.user.email}.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as "admin" | "member")}
-                disabled={isPending}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            <form.Field
+              name="role"
+              validators={{
+                onChange: editMemberSchema.shape.role,
+              }}
+            >
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Role</Label>
+                  <Select
+                    value={field.state.value}
+                    onValueChange={(value) => field.handleChange(value as "admin" | "member")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.toString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            {serverError && <p className="text-sm text-destructive">{serverError}</p>}
           </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : "Save"}
-            </Button>
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleClose}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Saving..." : "Save"}
+                  </Button>
+                </>
+              )}
+            </form.Subscribe>
           </DialogFooter>
         </form>
       </DialogContent>
