@@ -26,12 +26,13 @@ export const api = hc<AppType>(API_BASE_URL, {
     // Server-side: call backend directly with token
     if (isServer()) {
       const token = await getSessionToken();
+      const headers = new Headers(init?.headers);
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
       return fetch(input, {
         ...init,
-        headers: {
-          ...init?.headers,
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
+        headers,
       });
     }
 

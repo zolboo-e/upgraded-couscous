@@ -13,15 +13,16 @@
     }
   },
   "scripts": {
-    "dev": "tsup --watch --onSuccess \"node --env-file=.env dist/index.js\"",
+    "dev": "tsup --watch --onSuccess \"node --env-file=.env dist/server.js\"",
     "build": "tsup",
     "start": "node dist/index.js",
     "lint": "biome check ."
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.9",
     "@hono/standard-validator": "^0.2.2",
-    "@standard-schema/spec": "^1.1.0",
     "@repo/db": "workspace:*",
+    "@standard-schema/spec": "^1.1.0",
     "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.7",
