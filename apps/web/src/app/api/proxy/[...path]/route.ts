@@ -16,12 +16,25 @@ async function proxyRequest(request: NextRequest, path: string): Promise<Respons
   }
   headers.delete("host");
 
-  return fetch(url, {
+  const response = await fetch(url, {
     method: request.method,
     headers,
     body: request.body,
     // @ts-expect-error -- duplex required for streaming request bodies
     duplex: "half",
+  });
+
+  // Strip encoding headers - Node.js fetch auto-decompresses responses,
+  // but preserves the original headers, causing browser decode failures
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("transfer-encoding");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
   });
 }
 
