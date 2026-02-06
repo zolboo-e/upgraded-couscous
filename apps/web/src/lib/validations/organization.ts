@@ -4,7 +4,7 @@ export const roleSchema = z.enum(["admin", "member"]);
 
 export const addMemberSchema = z.object({
   email: z.string().email("Invalid email address").max(255),
-  name: z.string().max(255).optional(),
+  name: z.string().max(255, "Name must be at most 255 characters"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: roleSchema,
 });
