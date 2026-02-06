@@ -25,16 +25,17 @@ apps/web/src/
 
 ## Routes
 
-| Path | Route Group | Component | Auth |
-|------|-------------|-----------|------|
-| `/` | (public) | HomePage | No |
-| `/login` | (guest) | LoginForm | No |
-| `/register` | (guest) | RegisterForm | No |
-| `/chats` | (protected) | ChatList | Yes |
-| `/chats/[id]` | (protected) | ChatDetail | Yes |
-| `/organization` | (protected) | MemberList | Yes (Admin) |
+| Path            | Route Group | Component    | Auth        |
+| --------------- | ----------- | ------------ | ----------- |
+| `/`             | (public)    | HomePage     | No          |
+| `/login`        | (guest)     | LoginForm    | No          |
+| `/register`     | (guest)     | RegisterForm | No          |
+| `/chats`        | (protected) | ChatList     | Yes         |
+| `/chats/[id]`   | (protected) | ChatDetail   | Yes         |
+| `/organization` | (protected) | MemberList   | Yes (Admin) |
 
 Route groups control layouts:
+
 - `(public)` - Minimal layout
 - `(guest)` - Redirect to /chats if authenticated
 - `(protected)` - Requires auth, includes Header
@@ -43,33 +44,33 @@ Route groups control layouts:
 
 ### Chat System (`components/chat/`)
 
-| Component | Purpose |
-|-----------|---------|
-| `chat-detail.tsx` | Main chat interface with WebSocket connection |
-| `chat-list.tsx` | List of user's chat sessions |
-| `chat-input.tsx` | Message input with submit handling |
-| `chat-message.tsx` | Individual message display |
-| `tool-permission-dialog.tsx` | Tool permission request modal |
-| `ask-user-question.tsx` | Claude question with options |
-| `connection-status-bar.tsx` | WebSocket connection indicator |
-| `session-restore-status.tsx` | Session recovery notifications |
+| Component                    | Purpose                                       |
+| ---------------------------- | --------------------------------------------- |
+| `chat-detail.tsx`            | Main chat interface with WebSocket connection |
+| `chat-list.tsx`              | List of user's chat sessions                  |
+| `chat-input.tsx`             | Message input with submit handling            |
+| `chat-message.tsx`           | Individual message display                    |
+| `tool-permission-dialog.tsx` | Tool permission request modal                 |
+| `ask-user-question.tsx`      | Claude question with options                  |
+| `connection-status-bar.tsx`  | WebSocket connection indicator                |
+| `session-restore-status.tsx` | Session recovery notifications                |
 
 ### Authentication (`components/auth/`)
 
-| Component | Purpose |
-|-----------|---------|
-| `login-form.tsx` | Login with email/password |
-| `register-form.tsx` | New user registration |
-| `logout-button.tsx` | Session logout |
+| Component           | Purpose                   |
+| ------------------- | ------------------------- |
+| `login-form.tsx`    | Login with email/password |
+| `register-form.tsx` | New user registration     |
+| `logout-button.tsx` | Session logout            |
 
 ### Organization (`components/organization/`)
 
-| Component | Purpose |
-|-----------|---------|
-| `member-list.tsx` | Organization members display |
-| `add-member-dialog.tsx` | Invite new member |
-| `edit-member-dialog.tsx` | Update member role |
-| `remove-member-dialog.tsx` | Remove member confirmation |
+| Component                  | Purpose                      |
+| -------------------------- | ---------------------------- |
+| `member-list.tsx`          | Organization members display |
+| `add-member-dialog.tsx`    | Invite new member            |
+| `edit-member-dialog.tsx`   | Update member role           |
+| `remove-member-dialog.tsx` | Remove member confirmation   |
 
 ## API Integration
 
@@ -118,24 +119,88 @@ NEXT_PUBLIC_SANDBOX_WS_URL=wss://...         # Sandbox WebSocket
 
 ## Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `app/(protected)/layout.tsx` | Auth guard for protected routes |
-| `components/chat/chat-detail.tsx` | Main chat logic and WebSocket handling |
-| `lib/api/client.ts` | Hono RPC client configuration |
-| `lib/actions/auth.ts` | Authentication server actions |
-| `app/api/proxy/[...path]/route.ts` | API proxy for client requests |
+| File                               | Purpose                                |
+| ---------------------------------- | -------------------------------------- |
+| `app/(protected)/layout.tsx`       | Auth guard for protected routes        |
+| `components/chat/chat-detail.tsx`  | Main chat logic and WebSocket handling |
+| `lib/api/client.ts`                | Hono RPC client configuration          |
+| `lib/actions/auth.ts`              | Authentication server actions          |
+| `app/api/proxy/[...path]/route.ts` | API proxy for client requests          |
 
 ## Patterns
 
 ### Forms
-Uses `@tanstack/react-form` with Zod validation schemas from `lib/validations/`.
+
+**MUST use `@tanstack/react-form`** for all forms with Zod validation schemas from `lib/validations/`.
+
+#### Standard Pattern
+
+```typescript
+import { useForm } from "@tanstack/react-form";
+import { loginSchema } from "@/lib/validations/auth";
+
+const form = useForm({
+  defaultValues: { email: "", password: "" },
+  onSubmit: async ({ value }) => {
+    const result = await serverAction(value);
+    if (result.error) {
+      setError(result.error);
+    }
+  },
+});
+```
+
+#### Field Validation
+
+```typescript
+<form.Field
+	name="email"
+	validators={{
+		onChange: loginSchema.shape.email,
+	}}
+>
+	{(field) => (
+		<div className="space-y-2">
+			<Label htmlFor={field.name}>Email</Label>
+			<Input
+				id={field.name}
+				value={field.state.value}
+				onChange={(e) => field.handleChange(e.target.value)}
+				onBlur={field.handleBlur}
+			/>
+			{field.state.meta.errors.length > 0 && (
+				<p className="text-sm text-destructive">{field.state.meta.errors[0]?.toString()}</p>
+			)}
+		</div>
+	)}
+</form.Field>
+```
+
+#### Submit Button State
+
+```typescript
+<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+	{([canSubmit, isSubmitting]) => (
+		<Button type="submit" disabled={!canSubmit || isSubmitting}>
+			{isSubmitting ? "Submitting..." : "Submit"}
+		</Button>
+	)}
+</form.Subscribe>
+```
+
+#### Reference Implementations
+
+- `components/auth/login-form.tsx` - Login with email/password
+- `components/auth/register-form.tsx` - Registration with validation
 
 ### UI Components
+
 Imports from `@repo/ui` (shadcn/ui based). Add new components with:
+
 ```bash
 pnpm dlx shadcn@latest add <component>
 ```
 
 ### Icons
+
 Uses `lucide-react` for all icons.

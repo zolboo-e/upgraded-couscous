@@ -42,25 +42,25 @@ apps/container/src/
 
 ### Incoming (Browser → Container)
 
-| Type | Description |
-|------|-------------|
-| `start` | Initialize Claude query |
-| `message` | User chat message |
-| `permission_response` | Tool permission decision |
-| `ask_user_answer` | Answer to Claude's question |
-| `close` | Graceful disconnect |
+| Type                  | Description                 |
+| --------------------- | --------------------------- |
+| `start`               | Initialize Claude query     |
+| `message`             | User chat message           |
+| `permission_response` | Tool permission decision    |
+| `ask_user_answer`     | Answer to Claude's question |
+| `close`               | Graceful disconnect         |
 
 ### Outgoing (Container → Browser)
 
-| Type | Description |
-|------|-------------|
-| `sdk_message` | Raw Claude SDK messages |
-| `stream_start` | Begin streaming |
-| `chunk` | Text content chunk |
-| `stream_end` | End streaming |
-| `done` | Response complete with metadata |
-| `error` | Error message |
-| `memory_stats` | Memory usage (heap, RSS) |
+| Type           | Description                     |
+| -------------- | ------------------------------- |
+| `sdk_message`  | Raw Claude SDK messages         |
+| `stream_start` | Begin streaming                 |
+| `chunk`        | Text content chunk              |
+| `stream_end`   | End streaming                   |
+| `done`         | Response complete with metadata |
+| `error`        | Error message                   |
+| `memory_stats` | Memory usage (heap, RSS)        |
 
 ## Claude Agent SDK Integration
 
@@ -68,22 +68,22 @@ apps/container/src/
 
 ```typescript
 const claudeQuery = query({
-    prompt: promptGenerator,  // Async generator of user messages
-    options: {
-        model: CLAUDE_MODEL,
-        systemPrompt: message.systemPrompt,
-        extraArgs: { "session-id": sessionId },  // New session
-        resume: sessionId,                        // Resume existing
-    },
+  prompt: promptGenerator, // Async generator of user messages
+  options: {
+    model: CLAUDE_MODEL,
+    systemPrompt: message.systemPrompt,
+    extraArgs: { "session-id": sessionId }, // New session
+    resume: sessionId, // Resume existing
+  },
 });
 ```
 
 ### Session Handling
 
-| Scenario | SDK Options |
-|----------|-------------|
-| New session | `extraArgs: { "session-id": id }` |
-| Resume session | `resume: id` |
+| Scenario       | SDK Options                       |
+| -------------- | --------------------------------- |
+| New session    | `extraArgs: { "session-id": id }` |
+| Resume session | `resume: id`                      |
 
 Session existence checked by looking for files in `/root/.claude/`.
 
@@ -99,7 +99,7 @@ sessionQueue.enqueue(ws, userMessage);
 
 // Consumer: Claude SDK consumes via async generator
 for await (const message of sessionQueue.consume(ws)) {
-    // SDK processes message
+  // SDK processes message
 }
 ```
 
@@ -162,22 +162,24 @@ Writes to console and `/tmp/server.log`. Optionally pushes to Upstash Redis.
 ### Telemetry
 
 Upstash Redis integration for observability:
+
 - `sandbox:server:logs` - Server logs
 - `sandbox:shutdown:logs` - Shutdown events
 
 ### Memory Monitor
 
 Sends memory stats to client every 1000ms:
+
 - `heapUsed`, `heapTotal`, `rss`, `external` (in MB)
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_MODEL` | `claude-sonnet-4-20250514` | Claude model ID |
-| `ENVIRONMENT` | - | "production" enables R2 sync |
-| `UPSTASH_REDIS_URL` | - | Telemetry endpoint (optional) |
-| `UPSTASH_REDIS_TOKEN` | - | Telemetry auth (optional) |
+| Variable              | Default                    | Description                   |
+| --------------------- | -------------------------- | ----------------------------- |
+| `CLAUDE_MODEL`        | `claude-sonnet-4-20250514` | Claude model ID               |
+| `ENVIRONMENT`         | -                          | "production" enables R2 sync  |
+| `UPSTASH_REDIS_URL`   | -                          | Telemetry endpoint (optional) |
+| `UPSTASH_REDIS_TOKEN` | -                          | Telemetry auth (optional)     |
 
 ## Configuration
 
@@ -185,14 +187,14 @@ Sends memory stats to client every 1000ms:
 
 ```typescript
 SERVER_CONFIG = {
-    port: 8080,
-    logFile: "/tmp/server.log"
+  port: 8080,
+  logFile: "/tmp/server.log",
 };
 
 SYNC_CONFIG = {
-    basePath: "/persistent",
-    localPath: "/root/.claude",
-    directories: ["projects", "todos"]
+  basePath: "/persistent",
+  localPath: "/root/.claude",
+  directories: ["projects", "todos"],
 };
 ```
 
@@ -212,15 +214,15 @@ Multi-stage build:
 
 ## Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | Server initialization |
-| `src/handlers/message-handlers.ts` | WebSocket message routing |
-| `src/handlers/claude-processor.ts` | SDK message processing |
-| `src/session/message-queue.ts` | Async message queue |
-| `src/services/sync.ts` | R2 session persistence |
-| `src/shutdown/graceful-shutdown.ts` | Graceful shutdown |
-| `Dockerfile` | Container build configuration |
+| File                                | Purpose                       |
+| ----------------------------------- | ----------------------------- |
+| `src/index.ts`                      | Server initialization         |
+| `src/handlers/message-handlers.ts`  | WebSocket message routing     |
+| `src/handlers/claude-processor.ts`  | SDK message processing        |
+| `src/session/message-queue.ts`      | Async message queue           |
+| `src/services/sync.ts`              | R2 session persistence        |
+| `src/shutdown/graceful-shutdown.ts` | Graceful shutdown             |
+| `Dockerfile`                        | Container build configuration |
 
 ## Development
 

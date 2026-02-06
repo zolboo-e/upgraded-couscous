@@ -41,14 +41,14 @@ The sandbox worker uses **two Durable Objects**:
 
 Your custom DO that handles session-level logic:
 
-| Capability | Description |
-|------------|-------------|
-| Browser WebSocket | Accepts connections with Hibernation API |
-| Message relay | Forwards messages between browser and container |
-| Message persistence | Calls API to save messages to database |
-| R2 sync orchestration | Triggers mount/restore/sync via Sandbox DO |
-| Connection status | Sends `connecting`/`connected` updates |
-| Content accumulation | Aggregates assistant responses for DB |
+| Capability            | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| Browser WebSocket     | Accepts connections with Hibernation API        |
+| Message relay         | Forwards messages between browser and container |
+| Message persistence   | Calls API to save messages to database          |
+| R2 sync orchestration | Triggers mount/restore/sync via Sandbox DO      |
+| Connection status     | Sends `connecting`/`connected` updates          |
+| Content accumulation  | Aggregates assistant responses for DB           |
 
 ### Sandbox DO (Cloudflare Built-in)
 
@@ -68,18 +68,18 @@ sandbox.destroy();                  // Kill container
 
 ### Why Both DOs Are Needed
 
-| Need | Sandbox DO | SessionDO |
-|------|------------|-----------|
-| Accept browser WebSocket | ❌ | ✅ |
-| Hibernation API | ❌ | ✅ |
-| Custom message handling | ❌ | ✅ |
-| Persist messages to DB | ❌ | ✅ |
-| Accumulate assistant content | ❌ | ✅ |
-| R2 sync logic (rsync commands) | ❌ | ✅ |
-| Send connection status updates | ❌ | ✅ |
-| Container lifecycle | ✅ | ❌ |
-| Process execution | ✅ | ❌ |
-| R2 bucket mounting | ✅ | ❌ |
+| Need                           | Sandbox DO | SessionDO |
+| ------------------------------ | ---------- | --------- |
+| Accept browser WebSocket       | ❌         | ✅        |
+| Hibernation API                | ❌         | ✅        |
+| Custom message handling        | ❌         | ✅        |
+| Persist messages to DB         | ❌         | ✅        |
+| Accumulate assistant content   | ❌         | ✅        |
+| R2 sync logic (rsync commands) | ❌         | ✅        |
+| Send connection status updates | ❌         | ✅        |
+| Container lifecycle            | ✅         | ❌        |
+| Process execution              | ✅         | ❌        |
+| R2 bucket mounting             | ✅         | ❌        |
 
 You **cannot** add custom logic to Sandbox DO - it's Cloudflare's code. SessionDO exists to add your application logic on top.
 
@@ -95,13 +95,13 @@ Orchestrates R2 synchronization with debouncing and recovery.
 
 **File:** `apps/sandbox/src/durable-objects/sync-manager.ts`
 
-| Feature | Description |
-|---------|-------------|
-| Debounce | Waits 2s after last request before syncing |
-| Max wait | Forces sync after 10s regardless of activity |
-| Retry | Exponential backoff (3 attempts, 500ms base) |
-| Recovery | Persists failed sync state to DO storage |
-| Force sync | Immediate sync on browser disconnect |
+| Feature    | Description                                  |
+| ---------- | -------------------------------------------- |
+| Debounce   | Waits 2s after last request before syncing   |
+| Max wait   | Forces sync after 10s regardless of activity |
+| Retry      | Exponential backoff (3 attempts, 500ms base) |
+| Recovery   | Persists failed sync state to DO storage     |
+| Force sync | Immediate sync on browser disconnect         |
 
 **State Machine:**
 
@@ -130,12 +130,12 @@ Ensures ordered, reliable message persistence to the API.
 
 **File:** `apps/sandbox/src/durable-objects/message-persistence-queue.ts`
 
-| Feature | Description |
-|---------|-------------|
-| Ordering | FIFO processing maintains conversation order |
-| Retry | Exponential backoff (3 attempts, 500ms base) |
-| Non-blocking | Uses `ctx.waitUntil()` for async persistence |
-| Tracking | Returns `messageId` for each persisted message |
+| Feature      | Description                                    |
+| ------------ | ---------------------------------------------- |
+| Ordering     | FIFO processing maintains conversation order   |
+| Retry        | Exponential backoff (3 attempts, 500ms base)   |
+| Non-blocking | Uses `ctx.waitUntil()` for async persistence   |
+| Tracking     | Returns `messageId` for each persisted message |
 
 **Usage:**
 
@@ -145,7 +145,11 @@ this.persistenceQueue.initialize(sessionId);
 
 // Enqueue message (non-blocking, returns messageId)
 this.ctx.waitUntil(this.persistenceQueue.enqueue("user", content));
-const messageId = await this.persistenceQueue.enqueue("assistant", content, metadata);
+const messageId = await this.persistenceQueue.enqueue(
+  "assistant",
+  content,
+  metadata,
+);
 ```
 
 ### PendingMessageBuffer
@@ -154,12 +158,12 @@ Buffers messages when container is disconnected or sleeping.
 
 **File:** `apps/sandbox/src/durable-objects/pending-message-buffer.ts`
 
-| Feature | Description |
-|---------|-------------|
-| Capacity | Max 100 messages (drops oldest when full) |
-| Expiration | Auto-prunes messages older than 5 minutes |
-| Ordering | Preserves message order for replay |
-| Types | Supports user messages, permission responses, answers |
+| Feature    | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| Capacity   | Max 100 messages (drops oldest when full)             |
+| Expiration | Auto-prunes messages older than 5 minutes             |
+| Ordering   | Preserves message order for replay                    |
+| Types      | Supports user messages, permission responses, answers |
 
 **Message Lifecycle:**
 
@@ -188,10 +192,10 @@ The Hibernation API allows Durable Objects to "sleep" between WebSocket messages
 
 ### Cost Model
 
-| Billing Type | When | Cost |
-|--------------|------|------|
+| Billing Type            | When            | Cost                                   |
+| ----------------------- | --------------- | -------------------------------------- |
 | **Without Hibernation** | Wall-clock time | Billed entire duration WS is connected |
-| **With Hibernation** | CPU time only | Billed only when processing messages |
+| **With Hibernation**    | CPU time only   | Billed only when processing messages   |
 
 ### How It Works
 
@@ -249,7 +253,7 @@ While the container WebSocket is connected, SessionDO **cannot fully hibernate**
 ```typescript
 // This event listener keeps SessionDO awake
 this.containerWs.addEventListener("message", async (event) => {
-    await this.handleContainerMessage(event.data);
+  await this.handleContainerMessage(event.data);
 });
 ```
 
@@ -257,12 +261,12 @@ The 10-minute container sleep timeout (`sleepAfter: "10m"`) is the key cost opti
 
 ### Cost Comparison
 
-| Scenario | Without Hibernation | With Current Design |
-|----------|---------------------|---------------------|
-| User actively chatting | Billed | Billed |
-| User reading (< 10min) | Billed | Billed |
-| User idle (> 10min) | **Billed** | **Near-zero** ✅ |
-| Tab open overnight | **Very expensive** | **Cheap** ✅ |
+| Scenario               | Without Hibernation | With Current Design |
+| ---------------------- | ------------------- | ------------------- |
+| User actively chatting | Billed              | Billed              |
+| User reading (< 10min) | Billed              | Billed              |
+| User idle (> 10min)    | **Billed**          | **Near-zero** ✅    |
+| Tab open overnight     | **Very expensive**  | **Cheap** ✅        |
 
 ---
 
@@ -276,12 +280,12 @@ The browser first requests a short-lived JWT token for authentication.
 
 ```typescript
 export async function getWsToken(): Promise<string | null> {
-	const response = await fetch(`${API_BASE_URL}/auth/ws-token`, {
-		method: "GET",
-		credentials: "include",
-	});
-	const data = await response.json();
-	return data.data.token;
+  const response = await fetch(`${API_BASE_URL}/auth/ws-token`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const data = await response.json();
+  return data.data.token;
 }
 ```
 
@@ -291,11 +295,11 @@ export async function getWsToken(): Promise<string | null> {
 
 ```typescript
 const connectWebSocket = async (): Promise<void> => {
-	const token = await getWsToken();
-	const wsUrl = `${SANDBOX_WS_URL}/ws/v2?sessionId=${sessionId}&token=${token}`;
-	const ws = new WebSocket(wsUrl);
-	wsRef.current = ws;
-	setServerStatus("connecting");
+  const token = await getWsToken();
+  const wsUrl = `${SANDBOX_WS_URL}/ws/v2?sessionId=${sessionId}&token=${token}`;
+  const ws = new WebSocket(wsUrl);
+  wsRef.current = ws;
+  setServerStatus("connecting");
 };
 ```
 
@@ -307,17 +311,17 @@ The Worker verifies the JWT and forwards to the Durable Object.
 
 ```typescript
 export const websocketV2Route = new Hono<AppEnv>().get("/", async (c) => {
-	// JWT Token Validation
-	const token = extractToken(c.req.raw);
-	const user = await verifyJWT(token, c.env.JWT_SECRET);
+  // JWT Token Validation
+  const token = extractToken(c.req.raw);
+  const user = await verifyJWT(token, c.env.JWT_SECRET);
 
-	// Get SessionDO Instance
-	const sessionId = c.req.query("sessionId");
-	const doId = c.env.SessionDO.idFromName(sessionId);
-	const sessionDo = c.env.SessionDO.get(doId);
+  // Get SessionDO Instance
+  const sessionId = c.req.query("sessionId");
+  const doId = c.env.SessionDO.idFromName(sessionId);
+  const sessionDo = c.env.SessionDO.get(doId);
 
-	// Forward to Durable Object
-	return sessionDo.fetch(doRequest);
+  // Forward to Durable Object
+  return sessionDo.fetch(doRequest);
 });
 ```
 
@@ -351,14 +355,14 @@ private handleWebSocketUpgrade(url: URL): Response {
 
 ```typescript
 ws.addEventListener("open", () => {
-	setServerStatus("connected");
-	ws.send(
-		JSON.stringify({
-			type: "start",
-			sessionId,
-			...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
-		})
-	);
+  setServerStatus("connected");
+  ws.send(
+    JSON.stringify({
+      type: "start",
+      sessionId,
+      ...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
+    }),
+  );
 });
 ```
 
@@ -442,11 +446,11 @@ When the container has slept (10min idle timeout), messages are queued and the c
 
 ```typescript
 if (this.containerWs?.readyState === WebSocket.OPEN) {
-    this.containerWs.send(msg);
+  this.containerWs.send(msg);
 } else {
-    // Container has slept - queue message and restart
-    this.pendingMessages.add(msg, data.type);
-    await this.startContainer({ sessionId: this.sessionId });
+  // Container has slept - queue message and restart
+  this.pendingMessages.add(msg, data.type);
+  await this.startContainer({ sessionId: this.sessionId });
 }
 ```
 
@@ -457,18 +461,29 @@ This applies to user messages, permission responses, and ask_user answers.
 **File:** `apps/container/src/handlers/message-handlers.ts` (lines 98-118)
 
 ```typescript
-export function handleUserMessage(ws: WebSocket, message: IncomingMessage, deps: MessageHandlerDeps): void {
-	const { sessions, sessionQueue, logger } = deps;
+export function handleUserMessage(
+  ws: WebSocket,
+  message: IncomingMessage,
+  deps: MessageHandlerDeps,
+): void {
+  const { sessions, sessionQueue, logger } = deps;
 
-	const session = sessions.get(ws);
-	if (!session) {
-		sendMessage(ws, { type: "error", message: "Session not initialized" }, logger);
-		return;
-	}
+  const session = sessions.get(ws);
+  if (!session) {
+    sendMessage(
+      ws,
+      { type: "error", message: "Session not initialized" },
+      logger,
+    );
+    return;
+  }
 
-	if (message.content) {
-		sessionQueue.enqueue(ws, createUserMessage(message.content, session.sessionId ?? ""));
-	}
+  if (message.content) {
+    sessionQueue.enqueue(
+      ws,
+      createUserMessage(message.content, session.sessionId ?? ""),
+    );
+  }
 }
 ```
 
@@ -501,32 +516,38 @@ async *consume(ws: WebSocket): AsyncGenerator<SDKUserMessage> {
 
 ```typescript
 export async function processClaudeMessages(
-	ws: WebSocket,
-	claudeQuery: AsyncIterable<SDKMessage>,
-	sessionId: string | null,
-	logger: Logger,
-	syncSession: (sessionId: string | null) => Promise<void>
+  ws: WebSocket,
+  claudeQuery: AsyncIterable<SDKMessage>,
+  sessionId: string | null,
+  logger: Logger,
+  syncSession: (sessionId: string | null) => Promise<void>,
 ): Promise<void> {
-	for await (const message of claudeQuery) {
-		if (ws.readyState !== WebSocket.OPEN) {
-			break;
-		}
+  for await (const message of claudeQuery) {
+    if (ws.readyState !== WebSocket.OPEN) {
+      break;
+    }
 
-		// Forward raw SDK message for real-time display
-		sendMessage(ws, { type: "sdk_message", message }, logger);
+    // Forward raw SDK message for real-time display
+    sendMessage(ws, { type: "sdk_message", message }, logger);
 
-		// Handle result message for completion
-		if (message.type === "result") {
-			await syncSession(sessionId);
-			sendMessage(ws, {
-				type: "done",
-				metadata: {
-					tokensUsed: (message.usage?.input_tokens ?? 0) + (message.usage?.output_tokens ?? 0),
-					stopReason: message.subtype,
-				},
-			}, logger);
-		}
-	}
+    // Handle result message for completion
+    if (message.type === "result") {
+      await syncSession(sessionId);
+      sendMessage(
+        ws,
+        {
+          type: "done",
+          metadata: {
+            tokensUsed:
+              (message.usage?.input_tokens ?? 0) +
+              (message.usage?.output_tokens ?? 0),
+            stopReason: message.subtype,
+          },
+        },
+        logger,
+      );
+    }
+  }
 }
 ```
 
@@ -575,12 +596,12 @@ private async handleContainerMessage(msg: string): Promise<void> {
 
 ### 4.1 Storage Locations
 
-| Location                           | Data         | Purpose            |
-| ---------------------------------- | ------------ | ------------------ |
-| PostgreSQL                         | Messages     | Chat history       |
-| Container `/root/.claude/`         | SDK state    | Active session     |
-| R2 `/persistent/{id}/.claude/`     | SDK state    | Session resumption |
-| DO Storage                         | Sync state   | Failed sync recovery |
+| Location                       | Data       | Purpose              |
+| ------------------------------ | ---------- | -------------------- |
+| PostgreSQL                     | Messages   | Chat history         |
+| Container `/root/.claude/`     | SDK state  | Active session       |
+| R2 `/persistent/{id}/.claude/` | SDK state  | Session resumption   |
+| DO Storage                     | Sync state | Failed sync recovery |
 
 ### 4.2 R2 Sync Operations
 
@@ -627,7 +648,7 @@ SyncManager.requestSync() (debounced)
 ```typescript
 // In webSocketClose handler
 if (isProduction(this.env) && this.sandbox && this.sessionId) {
-    this.ctx.waitUntil(this.syncManager.forceSync());
+  this.ctx.waitUntil(this.syncManager.forceSync());
 }
 ```
 
@@ -641,13 +662,14 @@ this.ctx.waitUntil(this.persistenceQueue.enqueue("user", content));
 
 // Assistant message (returns messageId for browser)
 const messageId = await this.persistenceQueue.enqueue(
-    "assistant",
-    this.assistantContent,
-    data.metadata
+  "assistant",
+  this.assistantContent,
+  data.metadata,
 );
 ```
 
 The queue ensures:
+
 - **Ordering**: Messages persist in conversation order (FIFO)
 - **Reliability**: Retry with exponential backoff (3 attempts)
 - **Non-blocking**: Uses `ctx.waitUntil()` for async operation
@@ -660,7 +682,7 @@ If a sync fails after all retries, the state is persisted to DO storage:
 // On next container start
 const recovered = await this.syncManager.attemptRecovery();
 if (recovered) {
-    this.sendSessionStatus("sync_recovered");
+  this.sendSessionStatus("sync_recovered");
 }
 ```
 
@@ -716,20 +738,21 @@ startContainer()
 ```typescript
 // Check if session exists on disk
 const sessionExists = message.sessionId
-	? await checkSessionExists(message.sessionId, execFn, logger)
-	: false;
+  ? await checkSessionExists(message.sessionId, execFn, logger)
+  : false;
 
 // Start Claude query with session ID and resume flag
 const claudeQuery = query({
-	prompt: promptGenerator,
-	options: {
-		model,
-		systemPrompt: message.systemPrompt,
-		extraArgs: !sessionExists && message.sessionId
-			? { "session-id": message.sessionId } // New session
-			: undefined,
-		resume: sessionExists ? message.sessionId : undefined, // Restore session
-	},
+  prompt: promptGenerator,
+  options: {
+    model,
+    systemPrompt: message.systemPrompt,
+    extraArgs:
+      !sessionExists && message.sessionId
+        ? { "session-id": message.sessionId } // New session
+        : undefined,
+    resume: sessionExists ? message.sessionId : undefined, // Restore session
+  },
 });
 ```
 
@@ -739,42 +762,42 @@ const claudeQuery = query({
 
 ### Incoming (Browser → DO → Container)
 
-| Type                  | Description                    |
-| --------------------- | ------------------------------ |
-| `start`               | Initialize session             |
-| `message`             | User chat message              |
-| `permission_response` | Tool permission decision       |
-| `ask_user_answer`     | Answer to Claude's question    |
-| `close`               | Graceful disconnect            |
+| Type                  | Description                 |
+| --------------------- | --------------------------- |
+| `start`               | Initialize session          |
+| `message`             | User chat message           |
+| `permission_response` | Tool permission decision    |
+| `ask_user_answer`     | Answer to Claude's question |
+| `close`               | Graceful disconnect         |
 
 ### Outgoing (Container → DO → Browser)
 
-| Type                      | Description                              |
-| ------------------------- | ---------------------------------------- |
-| `sdk_message`             | Raw Claude SDK messages                  |
-| `stream_start`            | Begin streaming response                 |
-| `chunk`                   | Streaming text chunk                     |
-| `stream_end`              | End streaming response                   |
-| `done`                    | Response complete (includes messageId)   |
-| `error`                   | Error message                            |
+| Type                      | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `sdk_message`             | Raw Claude SDK messages                                    |
+| `stream_start`            | Begin streaming response                                   |
+| `chunk`                   | Streaming text chunk                                       |
+| `stream_end`              | End streaming response                                     |
+| `done`                    | Response complete (includes messageId)                     |
+| `error`                   | Error message                                              |
 | `connection_status`       | Sandbox status (`connecting`, `connected`, `disconnected`) |
-| `session_status`          | Restore/sync progress (see table below)  |
-| `tool_permission_request` | Request permission for tool              |
-| `ask_user_question`       | Claude asking user a question            |
-| `memory_stats`            | Container memory usage                   |
+| `session_status`          | Restore/sync progress (see table below)                    |
+| `tool_permission_request` | Request permission for tool                                |
+| `ask_user_question`       | Claude asking user a question                              |
+| `memory_stats`            | Container memory usage                                     |
 
 ### Session Status Values
 
 The `session_status` message reports restore and sync progress:
 
-| Status | Description |
-|--------|-------------|
-| `restore_started` | Beginning R2 restore process |
-| `restoring` | Rsync restore in progress |
-| `restored` | Successfully restored from R2 |
-| `restore_skipped` | No R2 data or development mode |
-| `restore_failed` | Restore operation failed |
-| `sync_recovered` | Recovered from previous failed sync |
+| Status            | Description                         |
+| ----------------- | ----------------------------------- |
+| `restore_started` | Beginning R2 restore process        |
+| `restoring`       | Rsync restore in progress           |
+| `restored`        | Successfully restored from R2       |
+| `restore_skipped` | No R2 data or development mode      |
+| `restore_failed`  | Restore operation failed            |
+| `sync_recovered`  | Recovered from previous failed sync |
 
 ---
 
@@ -884,21 +907,21 @@ Browser          SessionDO        Sandbox DO       Container
 
 ## Key Files
 
-| Component | File                                                 | Purpose                    |
-| --------- | ---------------------------------------------------- | -------------------------- |
-| Web       | `apps/web/src/components/chat/chat-detail.tsx`       | WebSocket client           |
-| Web       | `apps/web/src/lib/api/chat.ts`                       | API helpers & token        |
-| Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`            | Route handler              |
-| Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`     | SessionDO (custom)         |
-| Sandbox   | `apps/sandbox/src/durable-objects/sync-manager.ts`   | Debounced R2 sync with recovery |
-| Sandbox   | `apps/sandbox/src/durable-objects/message-persistence-queue.ts` | Ordered message persistence |
-| Sandbox   | `apps/sandbox/src/durable-objects/pending-message-buffer.ts` | Message buffering during sleep |
-| Sandbox   | `@cloudflare/sandbox`                                | Sandbox DO (CF built-in)   |
-| Sandbox   | `apps/sandbox/src/services/r2-sync.ts`               | R2 sync commands           |
-| Container | `apps/container/src/index.ts`                        | Server entry               |
-| Container | `apps/container/src/handlers/message-handlers.ts`    | Message dispatch           |
-| Container | `apps/container/src/handlers/claude-processor.ts`    | SDK processing             |
-| Container | `apps/container/src/session/message-queue.ts`        | Async message queue        |
+| Component | File                                                            | Purpose                         |
+| --------- | --------------------------------------------------------------- | ------------------------------- |
+| Web       | `apps/web/src/components/chat/chat-detail.tsx`                  | WebSocket client                |
+| Web       | `apps/web/src/lib/api/chat.ts`                                  | API helpers & token             |
+| Sandbox   | `apps/sandbox/src/routes/websocket-v2.ts`                       | Route handler                   |
+| Sandbox   | `apps/sandbox/src/durable-objects/session-do.ts`                | SessionDO (custom)              |
+| Sandbox   | `apps/sandbox/src/durable-objects/sync-manager.ts`              | Debounced R2 sync with recovery |
+| Sandbox   | `apps/sandbox/src/durable-objects/message-persistence-queue.ts` | Ordered message persistence     |
+| Sandbox   | `apps/sandbox/src/durable-objects/pending-message-buffer.ts`    | Message buffering during sleep  |
+| Sandbox   | `@cloudflare/sandbox`                                           | Sandbox DO (CF built-in)        |
+| Sandbox   | `apps/sandbox/src/services/r2-sync.ts`                          | R2 sync commands                |
+| Container | `apps/container/src/index.ts`                                   | Server entry                    |
+| Container | `apps/container/src/handlers/message-handlers.ts`               | Message dispatch                |
+| Container | `apps/container/src/handlers/claude-processor.ts`               | SDK processing                  |
+| Container | `apps/container/src/session/message-queue.ts`                   | Async message queue             |
 
 ---
 
@@ -908,24 +931,24 @@ Browser          SessionDO        Sandbox DO       Container
 
 ```jsonc
 {
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "SessionDO",      // Your custom DO
-				"class_name": "SessionDO"
-			},
-			{
-				"name": "Sandbox",        // Cloudflare's Container DO
-				"class_name": "Sandbox"   // From @cloudflare/containers
-			}
-		]
-	},
-	"r2_buckets": [
-		{
-			"binding": "R2",
-			"bucket_name": "claude-sessions"
-		}
-	]
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SessionDO", // Your custom DO
+        "class_name": "SessionDO",
+      },
+      {
+        "name": "Sandbox", // Cloudflare's Container DO
+        "class_name": "Sandbox", // From @cloudflare/containers
+      },
+    ],
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "claude-sessions",
+    },
+  ],
 }
 ```
 
@@ -933,19 +956,19 @@ Browser          SessionDO        Sandbox DO       Container
 
 ```typescript
 SANDBOX_CONFIG = {
-	sleepAfter: "10m" // Auto-sleep after idle
+  sleepAfter: "10m", // Auto-sleep after idle
 };
 
 CONTAINER_CONFIG = {
-	port: 8080,
-	healthPath: "/health",
-	startTimeout: 30000,
-	entrypoint: "bun /workspace/dist/index.js"
+  port: 8080,
+  healthPath: "/health",
+  startTimeout: 30000,
+  entrypoint: "bun /workspace/dist/index.js",
 };
 
 R2_CONFIG = {
-	bucketName: "claude-sessions",
-	mountPath: "/persistent"
+  bucketName: "claude-sessions",
+  mountPath: "/persistent",
 };
 ```
 
