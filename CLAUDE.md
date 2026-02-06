@@ -69,4 +69,6 @@ Sessions persist across container restarts via R2:
 
 - [Web App Architecture](docs/web-app.md) - Next.js frontend structure, components, and API integration
 - [API Architecture](docs/api.md) - Hono.js backend structure, endpoints, and middleware
+- [Sandbox Architecture](docs/sandbox.md) - Cloudflare Worker, Durable Objects, and R2 integration
+- [Container Architecture](docs/container.md) - Claude Agent SDK server running in sandbox
 - [WebSocket Lifecycle](docs/websocket-lifecycle.md) - Detailed connection lifecycle between Web, Durable Object, and Container
