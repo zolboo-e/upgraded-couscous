@@ -51,6 +51,24 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
+export interface UserWithCompany {
+  user: AuthUser;
+  company: {
+    id: string;
+    name: string;
+    role: "admin" | "member";
+  } | null;
+}
+
+export async function getCurrentUserWithCompany(): Promise<UserWithCompany | null> {
+  try {
+    const result = await parseResponse(api.auth.me.company.$get());
+    return result.data;
+  } catch {
+    return null;
+  }
+}
+
 export async function login(
   data: { email: string; password: string },
   callbackUrl?: string,

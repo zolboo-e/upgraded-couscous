@@ -43,4 +43,19 @@ export class AuthRepository {
     const [member] = await this.db.insert(companyMembers).values(data).returning();
     return member;
   }
+
+  async findUserCompany(
+    userId: string,
+  ): Promise<{ company: Company; role: "admin" | "member" } | null> {
+    const [result] = await this.db
+      .select({
+        company: companies,
+        role: companyMembers.role,
+      })
+      .from(companyMembers)
+      .innerJoin(companies, eq(companyMembers.companyId, companies.id))
+      .where(eq(companyMembers.userId, userId))
+      .limit(1);
+    return result ?? null;
+  }
 }

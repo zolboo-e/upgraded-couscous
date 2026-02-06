@@ -1,10 +1,10 @@
 import { Button } from "@repo/ui";
 import Link from "next/link";
-import { LogoutButton } from "@/components/auth/logout-button";
-import { getCurrentUser } from "@/lib/actions/auth";
+import { getCurrentUserWithCompany } from "@/lib/actions/auth";
+import { UserMenu } from "./user-menu";
 
 export async function Header(): Promise<React.ReactElement> {
-  const user = await getCurrentUser();
+  const userData = await getCurrentUserWithCompany();
 
   return (
     <header className="border-b bg-background">
@@ -14,13 +14,12 @@ export async function Header(): Promise<React.ReactElement> {
         </Link>
 
         <nav className="flex items-center gap-4">
-          {user ? (
+          {userData ? (
             <div className="flex items-center gap-4">
               <Link href="/chats" className="text-sm hover:text-primary">
                 Chats
               </Link>
-              <span className="text-sm text-muted-foreground">{user.name ?? user.email}</span>
-              <LogoutButton />
+              <UserMenu user={userData.user} company={userData.company} />
             </div>
           ) : (
             <div className="flex items-center gap-2">

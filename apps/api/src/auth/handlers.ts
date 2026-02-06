@@ -26,6 +26,13 @@ export function createAuthHandlers(authService: AuthService) {
 
       return c.json({ data: { user } });
     },
+
+    meWithCompany: async (c: Context) => {
+      const userId = c.get("userId");
+      const result = await authService.getCurrentUserWithCompany(userId);
+
+      return c.json({ data: result });
+    },
   };
 }
 

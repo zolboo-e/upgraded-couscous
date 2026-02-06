@@ -79,6 +79,25 @@ export class AuthService {
     };
   }
 
+  async getCurrentUserWithCompany(userId: string): Promise<{
+    user: AuthenticatedUser;
+    company: { id: string; name: string; role: "admin" | "member" } | null;
+  } | null> {
+    const user = await this.repository.findUserById(userId);
+    if (!user) {
+      return null;
+    }
+
+    const companyData = await this.repository.findUserCompany(userId);
+
+    return {
+      user: { id: user.id, email: user.email, name: user.name },
+      company: companyData
+        ? { id: companyData.company.id, name: companyData.company.name, role: companyData.role }
+        : null,
+    };
+  }
+
   private async createTokenForUser(
     userId: string,
     email: string,
