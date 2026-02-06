@@ -55,9 +55,10 @@ export async function addMember(
   email: string,
   name: string | undefined,
   role: "admin" | "member",
+  password: string,
 ): Promise<ActionResult> {
   try {
-    await parseResponse(api.organization.members.$post({ json: { email, name, role } }));
+    await parseResponse(api.organization.members.$post({ json: { email, name, role, password } }));
     revalidatePath("/organization");
     return { success: true };
   } catch (error) {

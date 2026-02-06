@@ -29,6 +29,7 @@ export function createOrganizationHandlers(organizationService: OrganizationServ
         input.email,
         input.name,
         input.role,
+        input.password,
       );
       return c.json({ data: member }, 201);
     },

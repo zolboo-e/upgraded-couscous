@@ -1,3 +1,4 @@
+import { hashPassword } from "../../auth/utils/password.js";
 import {
   CannotRemoveLastAdminError,
   CannotRemoveSelfError,
@@ -49,6 +50,7 @@ export class OrganizationService {
     email: string,
     name: string | undefined,
     role: "admin" | "member",
+    password: string,
   ): Promise<OrganizationMember> {
     const membership = await this.repository.findUserMembership(userId);
     if (!membership) {
@@ -64,10 +66,12 @@ export class OrganizationService {
       throw new UserAlreadyExistsError(email);
     }
 
+    const passwordHash = await hashPassword(password);
+
     const newUser = await this.repository.createUser({
       email: email.toLowerCase(),
       name: name ?? null,
-      passwordHash: null,
+      passwordHash,
     });
 
     const member = await this.repository.createMember({

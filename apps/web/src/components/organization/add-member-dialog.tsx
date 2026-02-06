@@ -27,6 +27,7 @@ interface AddMemberDialogProps {
 export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): React.ReactElement {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -34,6 +35,7 @@ export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): R
   function handleClose(): void {
     setEmail("");
     setName("");
+    setPassword("");
     setRole("member");
     setError(null);
     onOpenChange(false);
@@ -47,8 +49,18 @@ export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): R
       return;
     }
 
+    if (!password) {
+      setError("Password is required");
+      return;
+    }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
     startTransition(async () => {
-      const result = await addMember(email.trim(), name.trim() || undefined, role);
+      const result = await addMember(email.trim(), name.trim() || undefined, role, password);
       if (result.success) {
         handleClose();
       } else {
@@ -90,6 +102,20 @@ export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): R
               />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="password">Temporary Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Min. 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                The member will use this password to log in.
+              </p>
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
@@ -111,7 +137,7 @@ export function AddMemberDialog({ open, onOpenChange }: AddMemberDialogProps): R
             <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !email.trim() || !password}>
               {isPending ? "Adding..." : "Add Member"}
             </Button>
           </DialogFooter>
