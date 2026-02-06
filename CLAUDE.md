@@ -68,4 +68,5 @@ Sessions persist across container restarts via R2:
 ## Documentation
 
 - [Web App Architecture](docs/web-app.md) - Next.js frontend structure, components, and API integration
+- [API Architecture](docs/api.md) - Hono.js backend structure, endpoints, and middleware
 - [WebSocket Lifecycle](docs/websocket-lifecycle.md) - Detailed connection lifecycle between Web, Durable Object, and Container
