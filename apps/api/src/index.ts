@@ -7,11 +7,13 @@ import { createAuthModule } from "./auth/index.js";
 import { createChatModule } from "./chat/index.js";
 import { env } from "./config/env.js";
 import { createInternalModule } from "./internal/index.js";
+import { createOrganizationModule } from "./organization/index.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
 
 function createApp(db: Database) {
   const authModule = createAuthModule(db);
   const chatModule = createChatModule(db, authModule.middleware);
+  const organizationModule = createOrganizationModule(db, authModule.middleware);
 
   // Chain sub-routers and export THIS type for RPC
   // Following Hono best practices: https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications
@@ -21,6 +23,7 @@ function createApp(db: Database) {
     .use("*", errorHandler)
     .route("/auth", authModule.routes)
     .route("/chat", chatModule.routes)
+    .route("/organization", organizationModule.routes)
     .get("/health", (c) => c.json({ status: "ok" }));
 
   return routes;
