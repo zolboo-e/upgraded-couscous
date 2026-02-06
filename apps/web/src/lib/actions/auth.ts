@@ -12,6 +12,11 @@ export interface AuthUser {
   name: string | null;
 }
 
+export interface AuthResult {
+  success: boolean;
+  error?: string;
+}
+
 async function setSessionCookie(token: string): Promise<void> {
   const payload = decodeJwt(token);
   const exp = payload.exp;
@@ -49,18 +54,32 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 export async function login(
   data: { email: string; password: string },
   callbackUrl?: string,
-): Promise<never> {
-  const result = await parseResponse(api.auth.login.$post({ json: data }));
-  await setSessionCookie(result.data.token);
+): Promise<AuthResult> {
+  try {
+    const result = await parseResponse(api.auth.login.$post({ json: data }));
+    await setSessionCookie(result.data.token);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Login failed",
+    };
+  }
   redirect(callbackUrl ?? "/chats");
 }
 
 export async function register(
   data: { email: string; password: string; name?: string },
   callbackUrl?: string,
-): Promise<never> {
-  const result = await parseResponse(api.auth.register.$post({ json: data }));
-  await setSessionCookie(result.data.token);
+): Promise<AuthResult> {
+  try {
+    const result = await parseResponse(api.auth.register.$post({ json: data }));
+    await setSessionCookie(result.data.token);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Registration failed",
+    };
+  }
   redirect(callbackUrl ?? "/chats");
 }
 

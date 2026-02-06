@@ -19,18 +19,17 @@ export function RegisterForm(): React.ReactElement {
     },
     onSubmit: async ({ value }) => {
       setServerError(null);
-      try {
-        const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
-        await register(
-          {
-            email: value.email,
-            password: value.password,
-            name: value.name || undefined,
-          },
-          callbackUrl,
-        );
-      } catch (error) {
-        setServerError(error instanceof Error ? error.message : "Registration failed");
+      const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
+      const result = await register(
+        {
+          email: value.email,
+          password: value.password,
+          name: value.name || undefined,
+        },
+        callbackUrl,
+      );
+      if (!result.success) {
+        setServerError(result.error ?? "Registration failed");
       }
     },
   });

@@ -18,11 +18,10 @@ export function LoginForm(): React.ReactElement {
     },
     onSubmit: async ({ value }) => {
       setServerError(null);
-      try {
-        const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
-        await login(value, callbackUrl);
-      } catch (error) {
-        setServerError(error instanceof Error ? error.message : "Login failed");
+      const callbackUrl = searchParams.get("callbackUrl") ?? undefined;
+      const result = await login(value, callbackUrl);
+      if (!result.success) {
+        setServerError(result.error ?? "Login failed");
       }
     },
   });
