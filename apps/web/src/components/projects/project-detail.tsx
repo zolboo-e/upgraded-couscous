@@ -13,15 +13,17 @@ import {
 import { ArrowLeft, FolderOpen } from "lucide-react";
 import Link from "next/link";
 import type { ProjectMember, ProjectSummary } from "@/lib/actions/projects";
+import type { TaskSummary } from "@/lib/actions/tasks";
+import { KanbanBoard } from "../tasks/kanban-board";
 import { ProjectInfoTab } from "./project-info-tab";
-import { TasksTabPlaceholder } from "./tasks-tab-placeholder";
 
 interface ProjectDetailProps {
   project: ProjectSummary;
   members: ProjectMember[];
+  tasks: TaskSummary[];
 }
 
-export function ProjectDetail({ project, members }: ProjectDetailProps): React.ReactElement {
+export function ProjectDetail({ project, members, tasks }: ProjectDetailProps): React.ReactElement {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -57,7 +59,7 @@ export function ProjectDetail({ project, members }: ProjectDetailProps): React.R
         </TabsContent>
 
         <TabsContent value="tasks" className="mt-6">
-          <TasksTabPlaceholder />
+          <KanbanBoard projectId={project.id} tasks={tasks} />
         </TabsContent>
       </Tabs>
     </div>
