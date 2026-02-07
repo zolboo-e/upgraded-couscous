@@ -1,7 +1,6 @@
-import { notFound, redirect } from "next/navigation";
-import { ProjectDetail } from "@/components/projects/project-detail";
-import { getCurrentUserWithCompany } from "@/lib/actions/auth";
-import { getProjectById, getProjectMembers } from "@/lib/actions/projects";
+import { notFound } from "next/navigation";
+import { KanbanBoard } from "@/components/tasks/kanban-board";
+import { getProjectById } from "@/lib/actions/projects";
 import { getProjectTasks } from "@/lib/actions/tasks";
 
 interface ProjectPageProps {
@@ -13,27 +12,13 @@ export default async function ProjectPage({
 }: ProjectPageProps): Promise<React.ReactElement> {
   const { id } = await params;
 
-  const userData = await getCurrentUserWithCompany();
-  if (!userData?.company) {
-    redirect("/");
-  }
-
-  const [project, membersResult, tasksResult] = await Promise.all([
-    getProjectById(id),
-    getProjectMembers(id),
-    getProjectTasks(id),
-  ]);
+  const [project, tasksResult] = await Promise.all([getProjectById(id), getProjectTasks(id)]);
 
   if (!project) {
     notFound();
   }
 
-  const members = membersResult?.members ?? [];
   const tasks = tasksResult?.tasks ?? [];
 
-  return (
-    <main className="container mx-auto max-w-6xl px-4 py-8">
-      <ProjectDetail project={project} members={members} tasks={tasks} />
-    </main>
-  );
+  return <KanbanBoard projectId={id} tasks={tasks} />;
 }
