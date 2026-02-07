@@ -16,6 +16,9 @@ export async function Header(): Promise<React.ReactElement> {
         <nav className="flex items-center gap-4">
           {userData ? (
             <div className="flex items-center gap-4">
+              <Link href="/projects" className="text-sm hover:text-primary">
+                Projects
+              </Link>
               <Link href="/organization" className="text-sm hover:text-primary">
                 Organization
               </Link>
