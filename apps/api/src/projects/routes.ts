@@ -7,5 +7,7 @@ export function createProjectRoutes(handlers: ProjectHandlers, authMiddleware: M
     .createApp()
     .use("*", authMiddleware)
     .get("/", ...handlers.getProjects)
-    .post("/", ...handlers.createProject);
+    .post("/", ...handlers.createProject)
+    .get("/:id", ...handlers.getProjectById)
+    .get("/:id/members", ...handlers.getProjectMembers);
 }

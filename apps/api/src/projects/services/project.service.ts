@@ -1,6 +1,15 @@
-import { ForbiddenError, NoCompanyMembershipError } from "../errors/project.errors.js";
+import {
+  ForbiddenError,
+  NoCompanyMembershipError,
+  ProjectNotFoundError,
+} from "../errors/project.errors.js";
 import type { ProjectRepository } from "../repositories/project.repository.js";
-import type { CreatedProject, ProjectsListResponse } from "../types/project.types.js";
+import type {
+  CreatedProject,
+  ProjectMemberWithUser,
+  ProjectSummary,
+  ProjectsListResponse,
+} from "../types/project.types.js";
 
 export class ProjectService {
   constructor(private readonly repository: ProjectRepository) {}
@@ -48,5 +57,51 @@ export class ProjectService {
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     };
+  }
+
+  async getProjectById(userId: string, projectId: string): Promise<ProjectSummary> {
+    const membership = await this.repository.getUserCompanyMembership(userId);
+
+    if (!membership) {
+      throw new NoCompanyMembershipError();
+    }
+
+    const projectCompanyId = await this.repository.getProjectCompanyId(projectId);
+
+    if (!projectCompanyId) {
+      throw new ProjectNotFoundError();
+    }
+
+    if (projectCompanyId !== membership.companyId) {
+      throw new ForbiddenError("You do not have access to this project");
+    }
+
+    const project = await this.repository.findById(projectId);
+
+    if (!project) {
+      throw new ProjectNotFoundError();
+    }
+
+    return project;
+  }
+
+  async getProjectMembers(userId: string, projectId: string): Promise<ProjectMemberWithUser[]> {
+    const membership = await this.repository.getUserCompanyMembership(userId);
+
+    if (!membership) {
+      throw new NoCompanyMembershipError();
+    }
+
+    const projectCompanyId = await this.repository.getProjectCompanyId(projectId);
+
+    if (!projectCompanyId) {
+      throw new ProjectNotFoundError();
+    }
+
+    if (projectCompanyId !== membership.companyId) {
+      throw new ForbiddenError("You do not have access to this project");
+    }
+
+    return this.repository.findMembersByProjectId(projectId);
   }
 }

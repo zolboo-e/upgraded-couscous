@@ -17,6 +17,20 @@ export function createProjectHandlers(projectService: ProjectService) {
       const result = await projectService.createProject(userId, input.name, input.description);
       return c.json({ data: result }, 201);
     }),
+
+    getProjectById: factory.createHandlers(async (c) => {
+      const userId = c.get("userId");
+      const projectId = c.req.param("id");
+      const result = await projectService.getProjectById(userId, projectId);
+      return c.json({ data: result });
+    }),
+
+    getProjectMembers: factory.createHandlers(async (c) => {
+      const userId = c.get("userId");
+      const projectId = c.req.param("id");
+      const result = await projectService.getProjectMembers(userId, projectId);
+      return c.json({ data: { members: result } });
+    }),
   };
 }
 

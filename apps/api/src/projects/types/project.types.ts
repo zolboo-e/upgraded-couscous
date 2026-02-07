@@ -19,3 +19,17 @@ export interface CreatedProject {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface ProjectMemberUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+export interface ProjectMemberWithUser {
+  id: string;
+  userId: string;
+  role: string | null;
+  createdAt: Date;
+  user: ProjectMemberUser;
+}

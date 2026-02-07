@@ -1,6 +1,13 @@
-import { companyMembers, type Database, type Project, projectMembers, projects } from "@repo/db";
+import {
+  companyMembers,
+  type Database,
+  type Project,
+  projectMembers,
+  projects,
+  users,
+} from "@repo/db";
 import { and, count, eq, sql } from "drizzle-orm";
-import type { ProjectSummary } from "../types/project.types.js";
+import type { ProjectMemberWithUser, ProjectSummary } from "../types/project.types.js";
 
 export class ProjectRepository {
   constructor(private readonly db: Database) {}
@@ -99,5 +106,74 @@ export class ProjectRepository {
       })
       .returning();
     return project;
+  }
+
+  async findById(projectId: string): Promise<ProjectSummary | null> {
+    const memberCountSubquery = this.db
+      .select({
+        projectId: projectMembers.projectId,
+        count: count().as("member_count"),
+      })
+      .from(projectMembers)
+      .groupBy(projectMembers.projectId)
+      .as("member_counts");
+
+    const [result] = await this.db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        description: projects.description,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        memberCount: sql<number>`COALESCE(${memberCountSubquery.count}, 0)`.as("memberCount"),
+      })
+      .from(projects)
+      .leftJoin(memberCountSubquery, eq(projects.id, memberCountSubquery.projectId))
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      id: result.id,
+      name: result.name,
+      description: result.description,
+      memberCount: Number(result.memberCount),
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+    };
+  }
+
+  async findMembersByProjectId(projectId: string): Promise<ProjectMemberWithUser[]> {
+    const results = await this.db
+      .select({
+        id: projectMembers.id,
+        userId: projectMembers.userId,
+        role: projectMembers.role,
+        createdAt: projectMembers.createdAt,
+        user: {
+          id: users.id,
+          email: users.email,
+          name: users.name,
+        },
+      })
+      .from(projectMembers)
+      .innerJoin(users, eq(projectMembers.userId, users.id))
+      .where(eq(projectMembers.projectId, projectId))
+      .orderBy(projectMembers.createdAt);
+
+    return results;
+  }
+
+  async getProjectCompanyId(projectId: string): Promise<string | null> {
+    const [result] = await this.db
+      .select({ companyId: projects.companyId })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    return result?.companyId ?? null;
   }
 }

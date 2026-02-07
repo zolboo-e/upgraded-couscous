@@ -44,3 +44,41 @@ export async function createProject(name: string, description?: string): Promise
     };
   }
 }
+
+export async function getProjectById(projectId: string): Promise<ProjectSummary | null> {
+  try {
+    const result = await parseResponse(api.projects[":id"].$get({ param: { id: projectId } }));
+    return result.data;
+  } catch {
+    return null;
+  }
+}
+
+export interface ProjectMemberUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+export interface ProjectMember {
+  id: string;
+  userId: string;
+  role: string | null;
+  createdAt: string;
+  user: ProjectMemberUser;
+}
+
+export interface ProjectMembersResult {
+  members: ProjectMember[];
+}
+
+export async function getProjectMembers(projectId: string): Promise<ProjectMembersResult | null> {
+  try {
+    const result = await parseResponse(
+      api.projects[":id"].members.$get({ param: { id: projectId } }),
+    );
+    return result.data;
+  } catch {
+    return null;
+  }
+}
