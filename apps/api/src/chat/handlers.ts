@@ -1,43 +1,36 @@
-import type { Context } from "hono";
+import { sValidator } from "@hono/standard-validator";
+import { factory } from "../shared/factory.js";
 import type { ChatService } from "./services/chat.service.js";
-import type { CreateSessionInput } from "./types/chat.types.js";
+import { createSessionSchema, sessionIdSchema } from "./types/request.types.js";
 
 export function createChatHandlers(chatService: ChatService) {
   return {
-    createSession: async (c: Context) => {
+    createSession: factory.createHandlers(sValidator("json", createSessionSchema), async (c) => {
       const userId = c.get("userId");
-      const input = (await c.req.json()) as CreateSessionInput;
-
+      const input = c.req.valid("json");
       const session = await chatService.createSession(userId, input);
-
       return c.json({ data: session }, 201);
-    },
+    }),
 
-    listSessions: async (c: Context) => {
+    listSessions: factory.createHandlers(async (c) => {
       const userId = c.get("userId");
-
       const sessions = await chatService.listSessions(userId);
-
       return c.json({ data: sessions });
-    },
+    }),
 
-    getSession: async (c: Context) => {
+    getSession: factory.createHandlers(sValidator("param", sessionIdSchema), async (c) => {
       const userId = c.get("userId");
-      const id = c.req.param("id");
-
+      const { id } = c.req.valid("param");
       const session = await chatService.getSession(userId, id);
-
       return c.json({ data: session });
-    },
+    }),
 
-    deleteSession: async (c: Context) => {
+    deleteSession: factory.createHandlers(sValidator("param", sessionIdSchema), async (c) => {
       const userId = c.get("userId");
-      const id = c.req.param("id");
-
+      const { id } = c.req.valid("param");
       await chatService.deleteSession(userId, id);
-
       return c.json({ success: true });
-    },
+    }),
   };
 }
 

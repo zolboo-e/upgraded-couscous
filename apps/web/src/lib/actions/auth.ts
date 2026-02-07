@@ -86,7 +86,7 @@ export async function login(
 }
 
 export async function register(
-  data: { email: string; password: string; name?: string },
+  data: { email: string; password: string; companyName: string; name?: string },
   callbackUrl?: string,
 ): Promise<AuthResult> {
   try {

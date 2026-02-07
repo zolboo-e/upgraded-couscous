@@ -23,11 +23,3 @@ export function createAuthMiddleware(authService: AuthService) {
     await next();
   };
 }
-
-declare module "hono" {
-  interface ContextVariableMap {
-    userId: string;
-    userEmail: string;
-    sessionToken: string;
-  }
-}

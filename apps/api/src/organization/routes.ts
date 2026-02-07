@@ -1,27 +1,17 @@
-import { sValidator } from "@hono/standard-validator";
-import { Hono, type MiddlewareHandler } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { factory } from "../shared/factory.js";
 import type { OrganizationHandlers } from "./handlers.js";
-import {
-  addMemberSchema,
-  memberIdParamSchema,
-  updateMemberSchema,
-  updateOrganizationSchema,
-} from "./types/request.types.js";
 
 export function createOrganizationRoutes(
   handlers: OrganizationHandlers,
   authMiddleware: MiddlewareHandler,
 ) {
-  return new Hono()
+  return factory
+    .createApp()
     .use("*", authMiddleware)
-    .get("/", handlers.getOrganization)
-    .patch("/", sValidator("json", updateOrganizationSchema), handlers.updateOrganization)
-    .post("/members", sValidator("json", addMemberSchema), handlers.addMember)
-    .patch(
-      "/members/:id",
-      sValidator("param", memberIdParamSchema),
-      sValidator("json", updateMemberSchema),
-      handlers.updateMember,
-    )
-    .delete("/members/:id", sValidator("param", memberIdParamSchema), handlers.removeMember);
+    .get("/", ...handlers.getOrganization)
+    .patch("/", ...handlers.updateOrganization)
+    .post("/members", ...handlers.addMember)
+    .patch("/members/:id", ...handlers.updateMember)
+    .delete("/members/:id", ...handlers.removeMember);
 }

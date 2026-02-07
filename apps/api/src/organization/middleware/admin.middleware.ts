@@ -21,10 +21,3 @@ export function createAdminMiddleware(organizationService: OrganizationService) 
     await next();
   };
 }
-
-declare module "hono" {
-  interface ContextVariableMap {
-    companyId: string;
-    isAdmin: boolean;
-  }
-}

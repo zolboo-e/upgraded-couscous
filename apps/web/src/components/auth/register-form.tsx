@@ -16,6 +16,7 @@ export function RegisterForm(): React.ReactElement {
       email: "",
       password: "",
       name: "",
+      companyName: "",
     },
     onSubmit: async ({ value }) => {
       setServerError(null);
@@ -24,6 +25,7 @@ export function RegisterForm(): React.ReactElement {
         {
           email: value.email,
           password: value.password,
+          companyName: value.companyName,
           name: value.name || undefined,
         },
         callbackUrl,
@@ -65,6 +67,30 @@ export function RegisterForm(): React.ReactElement {
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
               placeholder="John Doe"
+            />
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">{field.state.meta.errors[0]?.toString()}</p>
+            )}
+          </div>
+        )}
+      </form.Field>
+
+      <form.Field
+        name="companyName"
+        validators={{
+          onChange: registerSchema.shape.companyName,
+        }}
+      >
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor={field.name}>Company Name</Label>
+            <Input
+              id={field.name}
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="Acme Inc."
             />
             {field.state.meta.errors.length > 0 && (
               <p className="text-sm text-destructive">{field.state.meta.errors[0]?.toString()}</p>
