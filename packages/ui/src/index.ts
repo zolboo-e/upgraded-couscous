@@ -60,4 +60,5 @@ export {
   SelectValue,
 } from "./components/select.js";
 export { Skeleton } from "./components/skeleton.js";
+export { Textarea } from "./components/textarea.js";
 export { cn } from "./lib/utils.js";

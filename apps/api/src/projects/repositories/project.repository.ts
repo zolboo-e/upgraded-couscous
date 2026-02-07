@@ -1,4 +1,4 @@
-import { companyMembers, type Database, projectMembers, projects } from "@repo/db";
+import { companyMembers, type Database, type Project, projectMembers, projects } from "@repo/db";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { ProjectSummary } from "../types/project.types.js";
 
@@ -87,5 +87,17 @@ export class ProjectRepository {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
+  }
+
+  async create(data: { companyId: string; name: string; description?: string }): Promise<Project> {
+    const [project] = await this.db
+      .insert(projects)
+      .values({
+        companyId: data.companyId,
+        name: data.name,
+        description: data.description ?? null,
+      })
+      .returning();
+    return project;
   }
 }
