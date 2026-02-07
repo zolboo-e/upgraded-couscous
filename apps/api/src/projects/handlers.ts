@@ -1,7 +1,7 @@
 import { sValidator } from "@hono/standard-validator";
 import { factory } from "../shared/factory.js";
 import type { ProjectService } from "./services/project.service.js";
-import { createProjectSchema } from "./types/request.types.js";
+import { createProjectSchema, projectIdParamSchema } from "./types/request.types.js";
 
 export function createProjectHandlers(projectService: ProjectService) {
   return {
@@ -18,19 +18,22 @@ export function createProjectHandlers(projectService: ProjectService) {
       return c.json({ data: result }, 201);
     }),
 
-    getProjectById: factory.createHandlers(async (c) => {
+    getProjectById: factory.createHandlers(sValidator("param", projectIdParamSchema), async (c) => {
       const userId = c.get("userId");
-      const projectId = c.req.param("id");
+      const { id: projectId } = c.req.valid("param");
       const result = await projectService.getProjectById(userId, projectId);
       return c.json({ data: result });
     }),
 
-    getProjectMembers: factory.createHandlers(async (c) => {
-      const userId = c.get("userId");
-      const projectId = c.req.param("id");
-      const result = await projectService.getProjectMembers(userId, projectId);
-      return c.json({ data: { members: result } });
-    }),
+    getProjectMembers: factory.createHandlers(
+      sValidator("param", projectIdParamSchema),
+      async (c) => {
+        const userId = c.get("userId");
+        const { id: projectId } = c.req.valid("param");
+        const result = await projectService.getProjectMembers(userId, projectId);
+        return c.json({ data: { members: result } });
+      },
+    ),
   };
 }
 
