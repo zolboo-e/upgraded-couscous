@@ -9,6 +9,7 @@ import type {
 import { SessionNotFoundError, UnauthorizedAccessError } from "../errors/chat.errors.js";
 import type { ChatRepository } from "../repositories/chat.repository.js";
 import type { CreateSessionInput, SessionWithMessages } from "../types/chat.types.js";
+import { buildProjectSessionPrompt, buildTaskSessionPrompt } from "./system-prompt-builder.js";
 
 export class ChatService {
   constructor(private readonly repository: ChatRepository) {}
@@ -36,9 +37,12 @@ export class ChatService {
       throw new UnauthorizedAccessError("session", sessionId);
     }
 
-    const messages = await this.repository.getMessagesBySessionId(sessionId);
+    const [systemPrompt, messages] = await Promise.all([
+      this.resolveSystemPrompt(session),
+      this.repository.getMessagesBySessionId(sessionId),
+    ]);
 
-    return { ...session, messages };
+    return { ...session, systemPrompt, messages };
   }
 
   async getTaskSession(userId: string, taskId: string): Promise<SessionWithMessages> {
@@ -48,9 +52,26 @@ export class ChatService {
       throw new SessionNotFoundError(taskId);
     }
 
-    const messages = await this.repository.getMessagesBySessionId(session.id);
+    const [systemPrompt, messages] = await Promise.all([
+      this.resolveSystemPrompt(session),
+      this.repository.getMessagesBySessionId(session.id),
+    ]);
 
-    return { ...session, messages };
+    return { ...session, systemPrompt, messages };
+  }
+
+  private async resolveSystemPrompt(session: Session): Promise<string | null> {
+    const taskContext = await this.repository.getTaskContextBySessionId(session.id);
+    if (taskContext) {
+      return buildTaskSessionPrompt(taskContext);
+    }
+
+    const projectContext = await this.repository.getProjectContextBySessionId(session.id);
+    if (projectContext) {
+      return buildProjectSessionPrompt(projectContext);
+    }
+
+    return session.systemPrompt;
   }
 
   async deleteSession(userId: string, sessionId: string): Promise<void> {

@@ -84,11 +84,9 @@ export class TaskService {
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
     });
 
-    const systemPrompt = buildTaskSystemPrompt(task.title, data.description);
     const session = await this.chatRepository.createSession({
       userId,
       title: task.title,
-      systemPrompt,
     });
     await this.chatRepository.linkSessionToTask(session.id, task.id);
 
@@ -169,13 +167,4 @@ export class TaskService {
 
     await this.taskRepository.delete(taskId);
   }
-}
-
-function buildTaskSystemPrompt(title: string, description?: string): string {
-  const lines = [`You are assisting with the following task:`, `Title: ${title}`];
-  if (description) {
-    lines.push(`Description: ${description}`);
-  }
-  lines.push("", "Help the user complete this task. Provide relevant guidance, code, or answers.");
-  return lines.join("\n");
 }

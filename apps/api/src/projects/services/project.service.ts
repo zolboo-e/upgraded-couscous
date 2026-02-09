@@ -57,7 +57,6 @@ export class ProjectService {
     const session = await this.chatRepository.createSession({
       userId,
       title: name,
-      systemPrompt: `You are assisting with the project "${name}".${description ? ` Project description: ${description}` : ""}\n\nHelp the user with any questions or tasks related to this project.`,
     });
     await this.chatRepository.linkSessionToProject(session.id, project.id);
 

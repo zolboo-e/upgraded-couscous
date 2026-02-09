@@ -4,12 +4,21 @@ import {
   messages,
   type NewMessage,
   type NewSession,
+  projectMembers,
+  projects,
   type Session,
   sessionProjects,
   sessions,
   sessionTasks,
+  taskAssignees,
+  tasks,
+  users,
 } from "@repo/db";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
+import type {
+  ProjectSessionContext,
+  TaskSessionContext,
+} from "../services/system-prompt-builder.js";
 
 export class ChatRepository {
   constructor(private readonly db: Database) {}
@@ -79,5 +88,93 @@ export class ChatRepository {
       .where(and(eq(sessionProjects.projectId, projectId), eq(sessions.userId, userId)))
       .limit(1);
     return result?.session ?? null;
+  }
+
+  async getTaskContextBySessionId(sessionId: string): Promise<TaskSessionContext | null> {
+    const [taskRow] = await this.db
+      .select({
+        taskId: tasks.id,
+        taskTitle: tasks.title,
+        taskDescription: tasks.description,
+        taskStatus: tasks.status,
+        taskPriority: tasks.priority,
+        taskDueDate: tasks.dueDate,
+        projectId: projects.id,
+        projectName: projects.name,
+        projectDescription: projects.description,
+      })
+      .from(sessionTasks)
+      .innerJoin(tasks, eq(sessionTasks.taskId, tasks.id))
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(eq(sessionTasks.sessionId, sessionId))
+      .limit(1);
+
+    if (!taskRow) {
+      return null;
+    }
+
+    const assigneeRows = await this.db
+      .select({ name: users.name, email: users.email })
+      .from(taskAssignees)
+      .innerJoin(users, eq(taskAssignees.userId, users.id))
+      .where(eq(taskAssignees.taskId, taskRow.taskId));
+
+    const siblingRows = await this.db
+      .select({ title: tasks.title, status: tasks.status, priority: tasks.priority })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, taskRow.projectId), ne(tasks.id, taskRow.taskId)));
+
+    return {
+      task: {
+        title: taskRow.taskTitle,
+        description: taskRow.taskDescription,
+        status: taskRow.taskStatus,
+        priority: taskRow.taskPriority,
+        dueDate: taskRow.taskDueDate,
+      },
+      project: {
+        name: taskRow.projectName,
+        description: taskRow.projectDescription,
+      },
+      assignees: assigneeRows.map((r) => r.name ?? r.email),
+      siblingTasks: siblingRows,
+    };
+  }
+
+  async getProjectContextBySessionId(sessionId: string): Promise<ProjectSessionContext | null> {
+    const [projectRow] = await this.db
+      .select({
+        projectId: projects.id,
+        projectName: projects.name,
+        projectDescription: projects.description,
+      })
+      .from(sessionProjects)
+      .innerJoin(projects, eq(sessionProjects.projectId, projects.id))
+      .where(eq(sessionProjects.sessionId, sessionId))
+      .limit(1);
+
+    if (!projectRow) {
+      return null;
+    }
+
+    const memberRows = await this.db
+      .select({ name: users.name, email: users.email, role: projectMembers.role })
+      .from(projectMembers)
+      .innerJoin(users, eq(projectMembers.userId, users.id))
+      .where(eq(projectMembers.projectId, projectRow.projectId));
+
+    const taskRows = await this.db
+      .select({ title: tasks.title, status: tasks.status, priority: tasks.priority })
+      .from(tasks)
+      .where(eq(tasks.projectId, projectRow.projectId));
+
+    return {
+      project: {
+        name: projectRow.projectName,
+        description: projectRow.projectDescription,
+      },
+      members: memberRows,
+      tasks: taskRows,
+    };
   }
 }
