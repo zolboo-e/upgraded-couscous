@@ -48,7 +48,7 @@ export function createInternalHandlers(
         description?: string | null;
       }>();
 
-      if (!body.title && body.description === undefined) {
+      if (body.title === undefined && body.description === undefined) {
         return c.json({ error: "At least one field (title or description) is required" }, 400);
       }
 

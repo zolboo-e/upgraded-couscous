@@ -56,6 +56,8 @@ Set via `wrangler secret put` for Cloudflare Worker:
 - `CF_ACCOUNT_ID` - Cloudflare account ID (set in wrangler.jsonc vars, then override with secret)
 - `AWS_ACCESS_KEY_ID` - R2 access key
 - `AWS_SECRET_ACCESS_KEY` - R2 secret key
+- `API_BASE_URL` - Base URL of the API server (e.g. `https://api.example.com`)
+- `INTERNAL_API_TOKEN` - Shared token for container-to-API auth (must match API's `INTERNAL_API_TOKEN`)
 
 ### Session Resumption
 
