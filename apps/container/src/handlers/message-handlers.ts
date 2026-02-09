@@ -7,7 +7,7 @@ import {
 } from "../session/index.js";
 import type { PermissionRegistry } from "../session/permission-registry.js";
 import type { QuestionRegistry } from "../session/question-registry.js";
-import { createTaskMcpServer } from "../tools/index.js";
+import { createTaskMcpServer, UPDATE_TASK_TOOL_NAME } from "../tools/index.js";
 import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 
@@ -102,7 +102,12 @@ export async function handleStart(
       model,
       systemPrompt: message.systemPrompt,
       mcpServers,
-      tools: ["WebFetch", "WebSearch", "AskUserQuestion"],
+      tools: [
+        "WebFetch",
+        "WebSearch",
+        "AskUserQuestion",
+        ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
+      ],
       canUseTool,
       extraArgs:
         !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
