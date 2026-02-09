@@ -1,7 +1,7 @@
 import { sValidator } from "@hono/standard-validator";
 import { factory } from "../shared/factory.js";
 import type { ChatService } from "./services/chat.service.js";
-import { createSessionSchema, sessionIdSchema } from "./types/request.types.js";
+import { createSessionSchema, sessionIdSchema, taskIdParamSchema } from "./types/request.types.js";
 
 export function createChatHandlers(chatService: ChatService) {
   return {
@@ -30,6 +30,13 @@ export function createChatHandlers(chatService: ChatService) {
       const { id } = c.req.valid("param");
       await chatService.deleteSession(userId, id);
       return c.json({ success: true });
+    }),
+
+    getTaskSession: factory.createHandlers(sValidator("param", taskIdParamSchema), async (c) => {
+      const userId = c.get("userId");
+      const { taskId } = c.req.valid("param");
+      const session = await chatService.getTaskSession(userId, taskId);
+      return c.json({ data: session });
     }),
   };
 }

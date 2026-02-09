@@ -9,5 +9,9 @@ export const sessionIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const taskIdParamSchema = z.object({
+  taskId: z.string().uuid(),
+});
+
 export type CreateSessionRequest = z.infer<typeof createSessionSchema>;
 export type SessionIdParam = z.infer<typeof sessionIdSchema>;

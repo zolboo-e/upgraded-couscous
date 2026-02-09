@@ -7,6 +7,7 @@ export function createChatRoutes(handlers: ChatHandlers, authMiddleware: Middlew
     .createApp()
     .post("/sessions", authMiddleware, ...handlers.createSession)
     .get("/sessions", authMiddleware, ...handlers.listSessions)
+    .get("/sessions/task/:taskId", authMiddleware, ...handlers.getTaskSession)
     .get("/sessions/:id", authMiddleware, ...handlers.getSession)
     .delete("/sessions/:id", authMiddleware, ...handlers.deleteSession);
 }

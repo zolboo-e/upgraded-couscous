@@ -41,6 +41,18 @@ export class ChatService {
     return { ...session, messages };
   }
 
+  async getTaskSession(userId: string, taskId: string): Promise<SessionWithMessages> {
+    const session = await this.repository.findSessionByTaskId(taskId, userId);
+
+    if (!session) {
+      throw new SessionNotFoundError(taskId);
+    }
+
+    const messages = await this.repository.getMessagesBySessionId(session.id);
+
+    return { ...session, messages };
+  }
+
   async deleteSession(userId: string, sessionId: string): Promise<void> {
     const session = await this.repository.getSessionById(sessionId);
 

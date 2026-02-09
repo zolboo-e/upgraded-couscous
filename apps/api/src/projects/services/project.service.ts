@@ -1,3 +1,4 @@
+import type { ChatRepository } from "../../chat/repositories/chat.repository.js";
 import {
   ForbiddenError,
   NoCompanyMembershipError,
@@ -12,7 +13,10 @@ import type {
 } from "../types/project.types.js";
 
 export class ProjectService {
-  constructor(private readonly repository: ProjectRepository) {}
+  constructor(
+    private readonly repository: ProjectRepository,
+    private readonly chatRepository: ChatRepository,
+  ) {}
 
   async getProjects(userId: string): Promise<ProjectsListResponse> {
     const membership = await this.repository.getUserCompanyMembership(userId);
@@ -49,6 +53,13 @@ export class ProjectService {
       name,
       description,
     });
+
+    const session = await this.chatRepository.createSession({
+      userId,
+      title: name,
+      systemPrompt: `You are assisting with the project "${name}".${description ? ` Project description: ${description}` : ""}\n\nHelp the user with any questions or tasks related to this project.`,
+    });
+    await this.chatRepository.linkSessionToProject(session.id, project.id);
 
     return {
       id: project.id,

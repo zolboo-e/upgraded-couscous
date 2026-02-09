@@ -17,6 +17,13 @@ export function createTaskHandlers(taskService: TaskService) {
       return c.json({ data: result });
     }),
 
+    getTask: factory.createHandlers(sValidator("param", taskParamsSchema), async (c) => {
+      const userId = c.get("userId");
+      const { projectId, taskId } = c.req.valid("param");
+      const result = await taskService.getTask(userId, projectId, taskId);
+      return c.json({ data: result });
+    }),
+
     createTask: factory.createHandlers(
       sValidator("param", projectIdParamSchema),
       sValidator("json", createTaskSchema),

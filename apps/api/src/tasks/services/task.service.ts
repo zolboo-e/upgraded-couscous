@@ -1,3 +1,4 @@
+import type { ChatRepository } from "../../chat/repositories/chat.repository.js";
 import {
   ForbiddenError,
   NoCompanyMembershipError,
@@ -18,6 +19,7 @@ export class TaskService {
   constructor(
     private readonly taskRepository: TaskRepository,
     private readonly projectRepository: ProjectRepository,
+    private readonly chatRepository: ChatRepository,
   ) {}
 
   private async validateProjectAccess(userId: string, projectId: string): Promise<void> {
@@ -46,6 +48,22 @@ export class TaskService {
     return { tasks };
   }
 
+  async getTask(userId: string, projectId: string, taskId: string): Promise<CreatedTask> {
+    await this.validateProjectAccess(userId, projectId);
+
+    const task = await this.taskRepository.findById(taskId);
+
+    if (!task) {
+      throw new TaskNotFoundError();
+    }
+
+    if (task.projectId !== projectId) {
+      throw new ForbiddenError("Task does not belong to this project");
+    }
+
+    return task;
+  }
+
   async createTask(
     userId: string,
     projectId: string,
@@ -65,6 +83,14 @@ export class TaskService {
       priority: data.priority,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
     });
+
+    const systemPrompt = buildTaskSystemPrompt(task.title, data.description);
+    const session = await this.chatRepository.createSession({
+      userId,
+      title: task.title,
+      systemPrompt,
+    });
+    await this.chatRepository.linkSessionToTask(session.id, task.id);
 
     return {
       id: task.id,
@@ -143,4 +169,13 @@ export class TaskService {
 
     await this.taskRepository.delete(taskId);
   }
+}
+
+function buildTaskSystemPrompt(title: string, description?: string): string {
+  const lines = [`You are assisting with the following task:`, `Title: ${title}`];
+  if (description) {
+    lines.push(`Description: ${description}`);
+  }
+  lines.push("", "Help the user complete this task. Provide relevant guidance, code, or answers.");
+  return lines.join("\n");
 }

@@ -3,6 +3,8 @@ export * from "./company-members";
 export * from "./messages";
 export * from "./project-members";
 export * from "./projects";
+export * from "./session-projects";
+export * from "./session-tasks";
 export * from "./sessions";
 export * from "./task-assignees";
 export * from "./tasks";

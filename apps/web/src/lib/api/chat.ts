@@ -102,3 +102,8 @@ export async function getChatSession(id: string) {
   const data = await parseResponse(api.chat.sessions[":id"].$get({ param: { id } }));
   return data.data;
 }
+
+export async function getTaskSession(taskId: string) {
+  const data = await parseResponse(api.chat.sessions.task[":taskId"].$get({ param: { taskId } }));
+  return data.data;
+}

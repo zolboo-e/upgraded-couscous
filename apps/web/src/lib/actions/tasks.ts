@@ -23,6 +23,17 @@ export interface TasksListResult {
   tasks: TaskSummary[];
 }
 
+export async function getTask(projectId: string, taskId: string): Promise<TaskSummary | null> {
+  try {
+    const result = await parseResponse(
+      api.projects[":projectId"].tasks[":taskId"].$get({ param: { projectId, taskId } }),
+    );
+    return result.data as TaskSummary;
+  } catch {
+    return null;
+  }
+}
+
 export async function getProjectTasks(projectId: string): Promise<TasksListResult | null> {
   try {
     const result = await parseResponse(
@@ -85,6 +96,7 @@ export async function updateTask(
       }),
     );
     revalidatePath(`/projects/${projectId}`);
+    revalidatePath(`/projects/${projectId}/tasks/${taskId}`);
     return { success: true };
   } catch (error) {
     return {

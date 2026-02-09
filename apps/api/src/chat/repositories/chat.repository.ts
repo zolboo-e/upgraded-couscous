@@ -5,9 +5,11 @@ import {
   type NewMessage,
   type NewSession,
   type Session,
+  sessionProjects,
   sessions,
+  sessionTasks,
 } from "@repo/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export class ChatRepository {
   constructor(private readonly db: Database) {}
@@ -49,5 +51,33 @@ export class ChatRepository {
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
       .orderBy(messages.createdAt);
+  }
+
+  async linkSessionToTask(sessionId: string, taskId: string): Promise<void> {
+    await this.db.insert(sessionTasks).values({ sessionId, taskId });
+  }
+
+  async linkSessionToProject(sessionId: string, projectId: string): Promise<void> {
+    await this.db.insert(sessionProjects).values({ sessionId, projectId });
+  }
+
+  async findSessionByTaskId(taskId: string, userId: string): Promise<Session | null> {
+    const [result] = await this.db
+      .select({ session: sessions })
+      .from(sessionTasks)
+      .innerJoin(sessions, eq(sessionTasks.sessionId, sessions.id))
+      .where(and(eq(sessionTasks.taskId, taskId), eq(sessions.userId, userId)))
+      .limit(1);
+    return result?.session ?? null;
+  }
+
+  async findSessionByProjectId(projectId: string, userId: string): Promise<Session | null> {
+    const [result] = await this.db
+      .select({ session: sessions })
+      .from(sessionProjects)
+      .innerJoin(sessions, eq(sessionProjects.sessionId, sessions.id))
+      .where(and(eq(sessionProjects.projectId, projectId), eq(sessions.userId, userId)))
+      .limit(1);
+    return result?.session ?? null;
   }
 }

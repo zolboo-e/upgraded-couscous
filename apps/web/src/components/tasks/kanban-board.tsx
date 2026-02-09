@@ -2,11 +2,10 @@
 
 import { Button } from "@repo/ui";
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { TaskStatus, TaskSummary } from "@/lib/actions/tasks";
 import { CreateTaskDialog } from "./create-task-dialog";
-import { DeleteTaskDialog } from "./delete-task-dialog";
-import { EditTaskDialog } from "./edit-task-dialog";
 import { KanbanColumn } from "./kanban-column";
 
 const KANBAN_COLUMNS: TaskStatus[] = ["todo", "in_progress", "done", "cancelled"];
@@ -17,9 +16,8 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ projectId, tasks }: KanbanBoardProps): React.ReactElement {
+  const router = useRouter();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<TaskSummary | null>(null);
-  const [deletingTask, setDeletingTask] = useState<TaskSummary | null>(null);
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskSummary[]> = {
@@ -37,14 +35,7 @@ export function KanbanBoard({ projectId, tasks }: KanbanBoardProps): React.React
   }, [tasks]);
 
   function handleTaskClick(task: TaskSummary): void {
-    setEditingTask(task);
-  }
-
-  function handleDeleteRequest(): void {
-    if (editingTask) {
-      setDeletingTask(editingTask);
-      setEditingTask(null);
-    }
+    router.push(`/projects/${projectId}/tasks/${task.id}`);
   }
 
   return (
@@ -72,29 +63,6 @@ export function KanbanBoard({ projectId, tasks }: KanbanBoardProps): React.React
         projectId={projectId}
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-      />
-
-      <EditTaskDialog
-        projectId={projectId}
-        task={editingTask}
-        open={editingTask !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditingTask(null);
-          }
-        }}
-        onDeleteRequest={handleDeleteRequest}
-      />
-
-      <DeleteTaskDialog
-        projectId={projectId}
-        task={deletingTask}
-        open={deletingTask !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeletingTask(null);
-          }
-        }}
       />
     </div>
   );

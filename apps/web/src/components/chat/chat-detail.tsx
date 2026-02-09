@@ -167,9 +167,19 @@ function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
 
 interface ChatDetailProps {
   sessionId: string;
+  backLink?: string;
+  backLabel?: string;
+  headerTitle?: string;
+  compactHeader?: boolean;
 }
 
-export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
+export function ChatDetail({
+  sessionId,
+  backLink = "/chats",
+  backLabel = "Back",
+  headerTitle,
+  compactHeader = false,
+}: ChatDetailProps): React.ReactElement {
   const [session, setSession] = useState<ChatSessionWithMessages | null>(null);
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -490,14 +500,8 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/chats" className="text-sm text-muted-foreground hover:text-foreground">
-              &larr; Back
-            </Link>
-            <h1 className="text-lg font-semibold">{session?.title ?? "Untitled Chat"}</h1>
-          </div>
+      {compactHeader ? (
+        <div className="flex justify-end border-b px-4 py-2">
           <ConnectionStatusBar
             serverStatus={serverStatus}
             agentStatus={agentStatus}
@@ -505,7 +509,26 @@ export function ChatDetail({ sessionId }: ChatDetailProps): React.ReactElement {
             memoryStats={memoryStats}
           />
         </div>
-      </div>
+      ) : (
+        <div className="border-b p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href={backLink} className="text-sm text-muted-foreground hover:text-foreground">
+                &larr; {backLabel}
+              </Link>
+              <h1 className="text-lg font-semibold">
+                {headerTitle ?? session?.title ?? "Untitled Chat"}
+              </h1>
+            </div>
+            <ConnectionStatusBar
+              serverStatus={serverStatus}
+              agentStatus={agentStatus}
+              sessionRestoreStatus={sessionRestoreStatus}
+              memoryStats={memoryStats}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mx-auto max-w-3xl space-y-4">
