@@ -94,9 +94,7 @@ export async function handleStart(
   // - canUseTool: routes permission requests to the frontend via WebSocket
   // - extraArgs: { "session-id": ... } sets the session ID for new sessions
   // - resume: sessionId restores existing session state from disk
-  const canUseTool = createCanUseTool(
-    ws, deps.permissionRegistry, deps.questionRegistry, logger,
-  );
+  const canUseTool = createCanUseTool(ws, deps.permissionRegistry, deps.questionRegistry, logger);
 
   const claudeQuery = query({
     prompt: promptGenerator,

@@ -39,7 +39,13 @@ export function createCanUseTool(
     }
 
     return handlePermissionRequest(
-      ws, permissionRegistry, logger, requestId, toolName, input, options.signal,
+      ws,
+      permissionRegistry,
+      logger,
+      requestId,
+      toolName,
+      input,
+      options.signal,
     );
   };
 }
@@ -55,11 +61,7 @@ async function handleAskUserQuestion(
   logger.info("AskUserQuestion request", { requestId });
 
   const questions = (input.questions ?? []) as QuestionItem[];
-  const sent = sendMessage(
-    ws,
-    { type: "ask_user_question", requestId, questions },
-    logger,
-  );
+  const sent = sendMessage(ws, { type: "ask_user_question", requestId, questions }, logger);
 
   if (!sent) {
     logger.error("Failed to send question request, WebSocket not open");
