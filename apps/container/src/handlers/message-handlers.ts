@@ -5,13 +5,17 @@ import {
   createUserMessage,
   type SessionMessageQueue,
 } from "../session/index.js";
-import { createTaskMcpServer, UPDATE_TASK_TOOL_NAME } from "../tools/index.js";
+import type { PermissionRegistry } from "../session/permission-registry.js";
+import { createTaskMcpServer } from "../tools/index.js";
 import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
+
 import { processClaudeMessages } from "./claude-processor.js";
+import { createCanUseTool } from "./permission-handler.js";
 
 export interface MessageHandlerDeps extends HandlerDependencies {
   sessionQueue: SessionMessageQueue;
+  permissionRegistry: PermissionRegistry;
   execFn: ExecFn;
   model: string;
 }
@@ -84,15 +88,20 @@ export async function handleStart(
     : undefined;
 
   // Start Claude query with session-id for persistence
+  // - tools: restricts available built-in tools
+  // - canUseTool: routes permission requests to the frontend via WebSocket
   // - extraArgs: { "session-id": ... } sets the session ID for new sessions
   // - resume: sessionId restores existing session state from disk
+  const canUseTool = createCanUseTool(ws, deps.permissionRegistry, logger);
+
   const claudeQuery = query({
     prompt: promptGenerator,
     options: {
       model,
       systemPrompt: message.systemPrompt,
       mcpServers,
-      allowedTools: hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : undefined,
+      tools: ["WebFetch", "WebSearch", "AskUserQuestion"],
+      canUseTool,
       extraArgs:
         !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
       resume: sessionExists ? message.sessionId : undefined,
@@ -144,10 +153,40 @@ export function handleUserMessage(
  */
 export function handleClose(
   ws: WebSocket,
-  deps: Pick<MessageHandlerDeps, "sessions" | "sessionQueue">,
+  deps: Pick<MessageHandlerDeps, "sessions" | "sessionQueue" | "permissionRegistry">,
 ): void {
   deps.sessionQueue.cleanup(ws);
+  deps.permissionRegistry.cleanupForSocket(ws);
   deps.sessions.delete(ws);
+}
+
+/**
+ * Handle permission response from frontend
+ */
+function handlePermissionResponse(
+  message: IncomingMessage,
+  deps: Pick<MessageHandlerDeps, "permissionRegistry" | "logger">,
+): void {
+  const { permissionRegistry, logger } = deps;
+
+  if (!message.requestId || !message.decision) {
+    logger.error("Invalid permission response", {
+      hasRequestId: !!message.requestId,
+      hasDecision: !!message.decision,
+    });
+    return;
+  }
+
+  const resolved = permissionRegistry.resolve(message.requestId, {
+    decision: message.decision,
+    modifiedInput: message.modifiedInput,
+  });
+
+  if (!resolved) {
+    logger.info("Permission response for unknown request", {
+      requestId: message.requestId,
+    });
+  }
 }
 
 /**
@@ -171,6 +210,9 @@ export async function handleMessage(
         break;
       case "message":
         handleUserMessage(ws, message, deps);
+        break;
+      case "permission_response":
+        handlePermissionResponse(message, deps);
         break;
       case "close":
         handleClose(ws, deps);

@@ -7,3 +7,4 @@ export {
   handleUserMessage,
   type MessageHandlerDeps,
 } from "./message-handlers.js";
+export { type CanUseToolFn, createCanUseTool } from "./permission-handler.js";

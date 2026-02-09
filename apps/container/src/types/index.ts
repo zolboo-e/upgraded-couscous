@@ -5,13 +5,17 @@ import type { WebSocket } from "ws";
  * Incoming WebSocket message from client
  */
 export interface IncomingMessage {
-  type: "start" | "message" | "close";
+  type: "start" | "message" | "close" | "permission_response";
   content?: string;
   systemPrompt?: string;
   sessionId?: string; // DB session UUID - used as Claude session ID
   resume?: boolean; // true = resume existing session, false/undefined = new session
   taskId?: string; // Task UUID if this session is linked to a task
   projectId?: string; // Project UUID if this session is linked to a task
+  // Permission response fields (type: "permission_response")
+  requestId?: string;
+  decision?: "allow" | "deny";
+  modifiedInput?: Record<string, unknown>;
 }
 
 /**
@@ -26,7 +30,13 @@ export type OutgoingMessage =
   | { type: "done"; metadata?: { tokensUsed?: number; stopReason?: string } }
   | { type: "error"; message: string }
   | { type: "memory_stats"; heapUsed: number; heapTotal: number; rss: number; external: number }
-  | { type: "task_updated"; taskId: string; title?: string; description?: string | null };
+  | { type: "task_updated"; taskId: string; title?: string; description?: string | null }
+  | {
+      type: "tool_permission_request";
+      requestId: string;
+      toolName: string;
+      toolInput: Record<string, unknown>;
+    };
 
 /**
  * State tracked for each WebSocket session
