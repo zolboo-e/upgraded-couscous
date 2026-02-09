@@ -15,7 +15,7 @@ import {
   execAsync,
   syncSessionToPersistent,
 } from "./services/index.js";
-import { PermissionRegistry, SessionMessageQueue } from "./session/index.js";
+import { PermissionRegistry, QuestionRegistry, SessionMessageQueue } from "./session/index.js";
 import { createGracefulShutdown } from "./shutdown/index.js";
 import type { SessionState } from "./types/index.js";
 
@@ -28,9 +28,10 @@ const logger = createLogger(telemetry);
 // Track active sessions
 const sessions = new Map<WebSocket, SessionState>();
 
-// Create message queue and permission registry
+// Create message queue and registries
 const sessionQueue = new SessionMessageQueue(logger);
 const permissionRegistry = new PermissionRegistry(logger);
+const questionRegistry = new QuestionRegistry(logger);
 
 // Get model from environment
 const model = getModel();
@@ -45,6 +46,7 @@ const handlerDeps: MessageHandlerDeps = {
   sessions,
   sessionQueue,
   permissionRegistry,
+  questionRegistry,
   logger,
   syncSession,
   execFn: execAsync,

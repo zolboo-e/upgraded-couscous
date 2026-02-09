@@ -5,7 +5,7 @@ import type { WebSocket } from "ws";
  * Incoming WebSocket message from client
  */
 export interface IncomingMessage {
-  type: "start" | "message" | "close" | "permission_response";
+  type: "start" | "message" | "close" | "permission_response" | "ask_user_answer";
   content?: string;
   systemPrompt?: string;
   sessionId?: string; // DB session UUID - used as Claude session ID
@@ -16,12 +16,26 @@ export interface IncomingMessage {
   requestId?: string;
   decision?: "allow" | "deny";
   modifiedInput?: Record<string, unknown>;
+  // Question answer fields (type: "ask_user_answer")
+  answers?: Record<string, string>;
 }
 
 /**
  * Outgoing WebSocket message to client
  * sdk_message: forwards raw SDK messages for real-time display
  */
+export interface QuestionOption {
+  readonly label: string;
+  readonly description: string;
+}
+
+export interface QuestionItem {
+  readonly question: string;
+  readonly header: string;
+  readonly options: QuestionOption[];
+  readonly multiSelect: boolean;
+}
+
 export type OutgoingMessage =
   | { type: "stream_start" }
   | { type: "stream_end" }
@@ -36,6 +50,11 @@ export type OutgoingMessage =
       requestId: string;
       toolName: string;
       toolInput: Record<string, unknown>;
+    }
+  | {
+      type: "ask_user_question";
+      requestId: string;
+      questions: QuestionItem[];
     };
 
 /**

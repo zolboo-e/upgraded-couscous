@@ -6,6 +6,7 @@ import {
   type SessionMessageQueue,
 } from "../session/index.js";
 import type { PermissionRegistry } from "../session/permission-registry.js";
+import type { QuestionRegistry } from "../session/question-registry.js";
 import { createTaskMcpServer } from "../tools/index.js";
 import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
@@ -16,6 +17,7 @@ import { createCanUseTool } from "./permission-handler.js";
 export interface MessageHandlerDeps extends HandlerDependencies {
   sessionQueue: SessionMessageQueue;
   permissionRegistry: PermissionRegistry;
+  questionRegistry: QuestionRegistry;
   execFn: ExecFn;
   model: string;
 }
@@ -92,7 +94,9 @@ export async function handleStart(
   // - canUseTool: routes permission requests to the frontend via WebSocket
   // - extraArgs: { "session-id": ... } sets the session ID for new sessions
   // - resume: sessionId restores existing session state from disk
-  const canUseTool = createCanUseTool(ws, deps.permissionRegistry, logger);
+  const canUseTool = createCanUseTool(
+    ws, deps.permissionRegistry, deps.questionRegistry, logger,
+  );
 
   const claudeQuery = query({
     prompt: promptGenerator,
@@ -153,10 +157,14 @@ export function handleUserMessage(
  */
 export function handleClose(
   ws: WebSocket,
-  deps: Pick<MessageHandlerDeps, "sessions" | "sessionQueue" | "permissionRegistry">,
+  deps: Pick<
+    MessageHandlerDeps,
+    "sessions" | "sessionQueue" | "permissionRegistry" | "questionRegistry"
+  >,
 ): void {
   deps.sessionQueue.cleanup(ws);
   deps.permissionRegistry.cleanupForSocket(ws);
+  deps.questionRegistry.cleanupForSocket(ws);
   deps.sessions.delete(ws);
 }
 
@@ -190,6 +198,32 @@ function handlePermissionResponse(
 }
 
 /**
+ * Handle question answer from frontend
+ */
+function handleQuestionAnswer(
+  message: IncomingMessage,
+  deps: Pick<MessageHandlerDeps, "questionRegistry" | "logger">,
+): void {
+  const { questionRegistry, logger } = deps;
+
+  if (!message.requestId || !message.answers) {
+    logger.error("Invalid question answer", {
+      hasRequestId: !!message.requestId,
+      hasAnswers: !!message.answers,
+    });
+    return;
+  }
+
+  const resolved = questionRegistry.resolve(message.requestId, message.answers);
+
+  if (!resolved) {
+    logger.info("Question answer for unknown request", {
+      requestId: message.requestId,
+    });
+  }
+}
+
+/**
  * Handle incoming WebSocket message
  */
 export async function handleMessage(
@@ -213,6 +247,9 @@ export async function handleMessage(
         break;
       case "permission_response":
         handlePermissionResponse(message, deps);
+        break;
+      case "ask_user_answer":
+        handleQuestionAnswer(message, deps);
         break;
       case "close":
         handleClose(ws, deps);
