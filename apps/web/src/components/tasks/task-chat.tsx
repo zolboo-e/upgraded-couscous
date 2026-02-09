@@ -12,6 +12,8 @@ export function TaskChat({ sessionId, projectId, taskId }: TaskChatProps): React
   return (
     <ChatDetail
       sessionId={sessionId}
+      taskId={taskId}
+      projectId={projectId}
       backLink={`/projects/${projectId}/tasks/${taskId}`}
       backLabel="Back to Task"
       headerTitle="Task Chat"

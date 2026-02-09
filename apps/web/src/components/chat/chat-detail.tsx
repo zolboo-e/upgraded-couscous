@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -90,6 +91,9 @@ interface RawStreamChunk {
   heapTotal?: number;
   rss?: number;
   external?: number;
+  // Task update fields
+  title?: string;
+  description?: string | null;
 }
 
 /**
@@ -107,7 +111,8 @@ interface StreamChunk {
     | "connection_status"
     | "sdk_message"
     | "session_status"
-    | "memory_stats";
+    | "memory_stats"
+    | "task_updated";
   content?: string;
   messageId?: string;
   metadata?: {
@@ -131,6 +136,8 @@ interface StreamChunk {
   sessionStatus?: SessionRestoreStatusValue;
   // Memory stats
   memoryStats?: MemoryStats;
+  // Task update data
+  taskUpdate?: { title?: string; description?: string | null };
 }
 
 function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
@@ -160,6 +167,8 @@ function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
       rss: raw.rss ?? 0,
       external: raw.external ?? 0,
     };
+  } else if (raw.type === "task_updated") {
+    chunk.taskUpdate = { title: raw.title, description: raw.description };
   }
 
   return chunk;
@@ -167,6 +176,8 @@ function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
 
 interface ChatDetailProps {
   sessionId: string;
+  taskId?: string;
+  projectId?: string;
   backLink?: string;
   backLabel?: string;
   headerTitle?: string;
@@ -175,11 +186,14 @@ interface ChatDetailProps {
 
 export function ChatDetail({
   sessionId,
+  taskId,
+  projectId,
   backLink = "/chats",
   backLabel = "Back",
   headerTitle,
   compactHeader = false,
 }: ChatDetailProps): React.ReactElement {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<ChatSessionWithMessages | null>(null);
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -253,6 +267,8 @@ export function ChatDetail({
             type: "start",
             sessionId,
             ...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
+            ...(taskId && { taskId }),
+            ...(projectId && { projectId }),
           }),
         );
       });
@@ -394,6 +410,16 @@ export function ChatDetail({
             setMemoryStats(chunk.memoryStats);
           }
           break;
+
+        case "task_updated":
+          if (chunk.taskUpdate && projectId && taskId) {
+            queryClient.setQueryData(
+              ["task", projectId, taskId],
+              (old: Record<string, unknown> | undefined) =>
+                old ? { ...old, ...chunk.taskUpdate } : old,
+            );
+          }
+          break;
       }
     };
 
@@ -407,7 +433,7 @@ export function ChatDetail({
       setServerStatus("disconnected");
       setAgentStatus("unknown");
     };
-  }, [sessionId, isLoading, error, session]);
+  }, [sessionId, isLoading, error, session, taskId, projectId, queryClient]);
 
   const handleSendMessage = (content: string): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {

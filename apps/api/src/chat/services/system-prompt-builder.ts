@@ -86,7 +86,20 @@ export function buildTaskSessionPrompt(context: TaskSessionContext): string {
     lines.push("", "## Other Tasks in Project", formatTaskList(siblingTasks));
   }
 
-  lines.push("", "Help the user complete this task. Provide relevant guidance, code, or answers.");
+  lines.push(
+    "",
+    "## Task Management",
+    "You have an `update_task` tool that can update this task's title and description.",
+    "Use it when:",
+    "- The user clarifies what this task is actually about and the current title/description is vague or inaccurate",
+    "- The task scope changes meaningfully during the conversation",
+    '- The title is generic (e.g. "New task") and a better name emerges',
+    "",
+    "**IMPORTANT**: Before calling `update_task`, you MUST use `AskUserQuestion` to propose the changes and get explicit user confirmation. Never update without asking first.",
+    "Do NOT update for trivial rephrasing or cosmetic changes.",
+    "",
+    "Help the user complete this task. Provide relevant guidance, code, or answers.",
+  );
 
   return lines.join("\n");
 }

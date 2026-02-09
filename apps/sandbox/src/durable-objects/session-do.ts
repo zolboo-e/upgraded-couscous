@@ -120,6 +120,8 @@ export class SessionDO extends DurableObject<Env> {
       content?: string;
       sessionId?: string;
       systemPrompt?: string;
+      taskId?: string;
+      projectId?: string;
     };
 
     try {
@@ -202,6 +204,8 @@ export class SessionDO extends DurableObject<Env> {
     sessionId?: string;
     systemPrompt?: string;
     content?: string;
+    taskId?: string;
+    projectId?: string;
   }): Promise<void> {
     const sessionId = data.sessionId ?? this.sessionId ?? "default";
     this.sessionId = sessionId;
@@ -230,6 +234,8 @@ export class SessionDO extends DurableObject<Env> {
         AWS_ACCESS_KEY_ID: this.env.AWS_ACCESS_KEY_ID,
         AWS_SECRET_ACCESS_KEY: this.env.AWS_SECRET_ACCESS_KEY,
         ENVIRONMENT: this.env.ENVIRONMENT ?? "development",
+        API_BASE_URL: this.env.API_BASE_URL ?? "",
+        INTERNAL_API_TOKEN: this.env.INTERNAL_API_TOKEN ?? "",
       });
 
       // Mount R2 and restore session (production)

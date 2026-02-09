@@ -10,6 +10,8 @@ export interface IncomingMessage {
   systemPrompt?: string;
   sessionId?: string; // DB session UUID - used as Claude session ID
   resume?: boolean; // true = resume existing session, false/undefined = new session
+  taskId?: string; // Task UUID if this session is linked to a task
+  projectId?: string; // Project UUID if this session is linked to a task
 }
 
 /**
@@ -23,13 +25,16 @@ export type OutgoingMessage =
   | { type: "chunk"; content: string }
   | { type: "done"; metadata?: { tokensUsed?: number; stopReason?: string } }
   | { type: "error"; message: string }
-  | { type: "memory_stats"; heapUsed: number; heapTotal: number; rss: number; external: number };
+  | { type: "memory_stats"; heapUsed: number; heapTotal: number; rss: number; external: number }
+  | { type: "task_updated"; taskId: string; title?: string; description?: string | null };
 
 /**
  * State tracked for each WebSocket session
  */
 export interface SessionState {
   sessionId: string | null; // DB session UUID for R2 sync path
+  taskId: string | null; // Task UUID for agent tools
+  projectId: string | null; // Project UUID for agent tools
 }
 
 /**

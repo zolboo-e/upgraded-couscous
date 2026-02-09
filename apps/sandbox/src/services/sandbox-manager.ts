@@ -23,6 +23,8 @@ export async function setEnvironmentVariables(sandbox: Sandbox, env: Env): Promi
     AWS_ACCESS_KEY_ID: env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: env.AWS_SECRET_ACCESS_KEY,
     ENVIRONMENT: env.ENVIRONMENT ?? "development",
+    API_BASE_URL: env.API_BASE_URL ?? "",
+    INTERNAL_API_TOKEN: env.INTERNAL_API_TOKEN ?? "",
   });
   console.log("[sandbox-manager] Environment variables set");
 }

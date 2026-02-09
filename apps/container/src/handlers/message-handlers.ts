@@ -5,6 +5,7 @@ import {
   createUserMessage,
   type SessionMessageQueue,
 } from "../session/index.js";
+import { createTaskMcpServer, UPDATE_TASK_TOOL_NAME } from "../tools/index.js";
 import type { ExecFn, HandlerDependencies, IncomingMessage } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 import { processClaudeMessages } from "./claude-processor.js";
@@ -57,11 +58,30 @@ export async function handleStart(
   // Store session info
   sessions.set(ws, {
     sessionId: message.sessionId ?? null,
+    taskId: message.taskId ?? null,
+    projectId: message.projectId ?? null,
   });
 
   // Create infinite prompt generator for this WebSocket
   // This generator stays alive until the WebSocket closes
   const promptGenerator = sessionQueue.consume(ws);
+
+  // Create MCP server for task tools if this is a task session
+  const apiBaseUrl = process.env.API_BASE_URL;
+  const apiToken = process.env.INTERNAL_API_TOKEN;
+  const hasTaskTools = !!(message.taskId && apiBaseUrl && apiToken);
+
+  const mcpServers = hasTaskTools
+    ? {
+        "task-tools": createTaskMcpServer({
+          taskId: message.taskId as string,
+          apiBaseUrl,
+          apiToken,
+          ws,
+          logger,
+        }),
+      }
+    : undefined;
 
   // Start Claude query with session-id for persistence
   // - extraArgs: { "session-id": ... } sets the session ID for new sessions
@@ -71,6 +91,8 @@ export async function handleStart(
     options: {
       model,
       systemPrompt: message.systemPrompt,
+      mcpServers,
+      allowedTools: hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : undefined,
       extraArgs:
         !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
       resume: sessionExists ? message.sessionId : undefined,

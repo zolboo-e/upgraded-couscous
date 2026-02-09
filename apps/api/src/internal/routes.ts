@@ -11,5 +11,8 @@ export function createInternalRoutes(handlers: InternalHandlers): Hono {
   // POST /internal/sessions/:sessionId/messages - Save a message
   internal.post("/sessions/:sessionId/messages", handlers.saveMessage);
 
+  // PATCH /internal/tasks/:taskId - Update a task (from agent)
+  internal.patch("/tasks/:taskId", handlers.updateTask);
+
   return internal;
 }
