@@ -137,6 +137,7 @@ export function TaskDetailInfo({
                     <Label htmlFor={field.name}>Details</Label>
                     <Textarea
                       id={field.name}
+                      className="max-h-64 overflow-y-auto"
                       placeholder="Detailed notes (supports markdown)..."
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
