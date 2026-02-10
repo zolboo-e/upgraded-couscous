@@ -70,6 +70,7 @@ export class TaskService {
     data: {
       title: string;
       description?: string;
+      details?: string;
       priority?: TaskPriority;
       dueDate?: string;
     },
@@ -80,6 +81,7 @@ export class TaskService {
       projectId,
       title: data.title,
       description: data.description,
+      details: data.details,
       priority: data.priority,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
     });
@@ -95,6 +97,7 @@ export class TaskService {
       projectId: task.projectId,
       title: task.title,
       description: task.description,
+      details: task.details,
       status: task.status as TaskStatus,
       priority: task.priority as TaskPriority,
       dueDate: task.dueDate,
@@ -110,6 +113,7 @@ export class TaskService {
     data: {
       title?: string;
       description?: string | null;
+      details?: string | null;
       status?: TaskStatus;
       priority?: TaskPriority;
       dueDate?: string | null;
@@ -130,6 +134,7 @@ export class TaskService {
     const task = await this.taskRepository.update(taskId, {
       title: data.title,
       description: data.description,
+      details: data.details,
       status: data.status,
       priority: data.priority,
       dueDate: data.dueDate === null ? null : data.dueDate ? new Date(data.dueDate) : undefined,
@@ -144,6 +149,7 @@ export class TaskService {
       projectId: task.projectId,
       title: task.title,
       description: task.description,
+      details: task.details,
       status: task.status as TaskStatus,
       priority: task.priority as TaskPriority,
       dueDate: task.dueDate,

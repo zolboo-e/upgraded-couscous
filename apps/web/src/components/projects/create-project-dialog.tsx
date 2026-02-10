@@ -32,10 +32,15 @@ export function CreateProjectDialog({
     defaultValues: {
       name: "",
       description: "",
+      details: "",
     },
     onSubmit: async ({ value }) => {
       setServerError(null);
-      const result = await createProject(value.name.trim(), value.description.trim() || undefined);
+      const result = await createProject(
+        value.name.trim(),
+        value.description.trim() || undefined,
+        value.details.trim() || undefined,
+      );
       if (result.success) {
         form.reset();
         setServerError(null);
@@ -115,6 +120,22 @@ export function CreateProjectDialog({
                       {field.state.meta.errors[0]?.toString()}
                     </p>
                   )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="details">
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Details (optional)</Label>
+                  <Textarea
+                    id={field.name}
+                    placeholder="Detailed notes (supports markdown)..."
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    rows={6}
+                  />
                 </div>
               )}
             </form.Field>

@@ -2,6 +2,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   description: string | null;
+  details: string | null;
   memberCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -16,6 +17,7 @@ export interface CreatedProject {
   id: string;
   name: string;
   description: string | null;
+  details: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -46,10 +46,18 @@ export function createInternalHandlers(
       const body = await c.req.json<{
         title?: string;
         description?: string | null;
+        details?: string | null;
       }>();
 
-      if (body.title === undefined && body.description === undefined) {
-        return c.json({ error: "At least one field (title or description) is required" }, 400);
+      if (
+        body.title === undefined &&
+        body.description === undefined &&
+        body.details === undefined
+      ) {
+        return c.json(
+          { error: "At least one field (title, description, or details) is required" },
+          400,
+        );
       }
 
       if (body.title !== undefined && (body.title.length === 0 || body.title.length > 255)) {
@@ -72,6 +80,7 @@ export function createInternalHandlers(
       const updated = await taskRepository.update(taskId, {
         title: body.title,
         description: body.description,
+        details: body.details,
       });
 
       return c.json({ task: updated });

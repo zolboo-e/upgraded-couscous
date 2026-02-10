@@ -14,7 +14,12 @@ export function createProjectHandlers(projectService: ProjectService) {
     createProject: factory.createHandlers(sValidator("json", createProjectSchema), async (c) => {
       const userId = c.get("userId");
       const input = c.req.valid("json");
-      const result = await projectService.createProject(userId, input.name, input.description);
+      const result = await projectService.createProject(
+        userId,
+        input.name,
+        input.description,
+        input.details,
+      );
       return c.json({ data: result }, 201);
     }),
 

@@ -44,7 +44,13 @@ export type OutgoingMessage =
   | { type: "done"; metadata?: { tokensUsed?: number; stopReason?: string } }
   | { type: "error"; message: string }
   | { type: "memory_stats"; heapUsed: number; heapTotal: number; rss: number; external: number }
-  | { type: "task_updated"; taskId: string; title?: string; description?: string | null }
+  | {
+      type: "task_updated";
+      taskId: string;
+      title?: string;
+      description?: string | null;
+      details?: string | null;
+    }
   | {
       type: "tool_permission_request";
       requestId: string;

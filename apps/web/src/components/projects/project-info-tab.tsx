@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui";
-import { Calendar, Users } from "lucide-react";
+import { Calendar, FileText, Users } from "lucide-react";
+import Markdown from "react-markdown";
 import type { ProjectMember, ProjectSummary } from "@/lib/actions/projects";
 import { ProjectMembersSection } from "./project-members-section";
 
@@ -53,6 +54,22 @@ export function ProjectInfoTab({ project, members }: ProjectInfoTabProps): React
           <ProjectMembersSection members={members} />
         </CardContent>
       </Card>
+
+      {project.details && (
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileText className="h-5 w-5" />
+              Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <Markdown>{project.details}</Markdown>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

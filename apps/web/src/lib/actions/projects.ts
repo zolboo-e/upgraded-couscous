@@ -8,6 +8,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   description: string | null;
+  details: string | null;
   memberCount: number;
   createdAt: string;
   updatedAt: string;
@@ -29,9 +30,13 @@ export async function getProjects(): Promise<ProjectsListResult | null> {
 
 import type { ActionResult } from "../types";
 
-export async function createProject(name: string, description?: string): Promise<ActionResult> {
+export async function createProject(
+  name: string,
+  description?: string,
+  details?: string,
+): Promise<ActionResult> {
   try {
-    await parseResponse(api.projects.$post({ json: { name, description } }));
+    await parseResponse(api.projects.$post({ json: { name, description, details } }));
     revalidatePath("/projects");
     return { success: true };
   } catch (error) {

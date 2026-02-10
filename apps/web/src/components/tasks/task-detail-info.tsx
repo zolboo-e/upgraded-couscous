@@ -50,6 +50,7 @@ export function TaskDetailInfo({
     defaultValues: {
       title: task.title,
       description: task.description ?? "",
+      details: task.details ?? "",
       status: task.status as TaskStatus,
       priority: task.priority as TaskPriority,
       dueDate: task.dueDate ? task.dueDate.split("T")[0] : "",
@@ -59,6 +60,7 @@ export function TaskDetailInfo({
       const result = await updateTask(projectId, task.id, {
         title: value.title.trim(),
         description: value.description.trim() || null,
+        details: value.details.trim() || null,
         status: value.status,
         priority: value.priority,
         dueDate: value.dueDate || null,
@@ -125,6 +127,22 @@ export function TaskDetailInfo({
                         {field.state.meta.errors[0]?.toString()}
                       </p>
                     )}
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="details">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label htmlFor={field.name}>Details</Label>
+                    <Textarea
+                      id={field.name}
+                      placeholder="Detailed notes (supports markdown)..."
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      rows={8}
+                    />
                   </div>
                 )}
               </form.Field>

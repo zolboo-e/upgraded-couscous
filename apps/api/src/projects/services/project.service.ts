@@ -37,7 +37,12 @@ export class ProjectService {
     };
   }
 
-  async createProject(userId: string, name: string, description?: string): Promise<CreatedProject> {
+  async createProject(
+    userId: string,
+    name: string,
+    description?: string,
+    details?: string,
+  ): Promise<CreatedProject> {
     const membership = await this.repository.getUserCompanyMembership(userId);
 
     if (!membership) {
@@ -52,6 +57,7 @@ export class ProjectService {
       companyId: membership.companyId,
       name,
       description,
+      details,
     });
 
     const session = await this.chatRepository.createSession({
@@ -64,6 +70,7 @@ export class ProjectService {
       id: project.id,
       name: project.name,
       description: project.description,
+      details: project.details,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     };

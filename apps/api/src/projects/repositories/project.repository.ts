@@ -42,6 +42,7 @@ export class ProjectRepository {
         id: projects.id,
         name: projects.name,
         description: projects.description,
+        details: projects.details,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
         memberCount: sql<number>`COALESCE(${memberCountSubquery.count}, 0)`.as("memberCount"),
@@ -55,6 +56,7 @@ export class ProjectRepository {
       id: row.id,
       name: row.name,
       description: row.description,
+      details: row.details,
       memberCount: Number(row.memberCount),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -76,6 +78,7 @@ export class ProjectRepository {
         id: projects.id,
         name: projects.name,
         description: projects.description,
+        details: projects.details,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
         memberCount: sql<number>`COALESCE(${memberCountSubquery.count}, 0)`.as("memberCount"),
@@ -90,19 +93,26 @@ export class ProjectRepository {
       id: row.id,
       name: row.name,
       description: row.description,
+      details: row.details,
       memberCount: Number(row.memberCount),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
   }
 
-  async create(data: { companyId: string; name: string; description?: string }): Promise<Project> {
+  async create(data: {
+    companyId: string;
+    name: string;
+    description?: string;
+    details?: string;
+  }): Promise<Project> {
     const [project] = await this.db
       .insert(projects)
       .values({
         companyId: data.companyId,
         name: data.name,
         description: data.description ?? null,
+        details: data.details ?? null,
       })
       .returning();
     return project;
@@ -123,6 +133,7 @@ export class ProjectRepository {
         id: projects.id,
         name: projects.name,
         description: projects.description,
+        details: projects.details,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
         memberCount: sql<number>`COALESCE(${memberCountSubquery.count}, 0)`.as("memberCount"),
@@ -140,6 +151,7 @@ export class ProjectRepository {
       id: result.id,
       name: result.name,
       description: result.description,
+      details: result.details,
       memberCount: Number(result.memberCount),
       createdAt: result.createdAt,
       updatedAt: result.updatedAt,

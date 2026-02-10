@@ -49,6 +49,7 @@ export function EditTaskDialog({
     defaultValues: {
       title: task?.title ?? "",
       description: task?.description ?? "",
+      details: task?.details ?? "",
       status: (task?.status ?? "todo") as TaskStatus,
       priority: (task?.priority ?? "medium") as TaskPriority,
       dueDate: task?.dueDate ? task.dueDate.split("T")[0] : "",
@@ -60,6 +61,7 @@ export function EditTaskDialog({
       const result = await updateTask(projectId, task.id, {
         title: value.title.trim(),
         description: value.description.trim() || null,
+        details: value.details.trim() || null,
         status: value.status,
         priority: value.priority,
         dueDate: value.dueDate || null,
@@ -78,6 +80,7 @@ export function EditTaskDialog({
       form.reset();
       form.setFieldValue("title", task.title);
       form.setFieldValue("description", task.description ?? "");
+      form.setFieldValue("details", task.details ?? "");
       form.setFieldValue("status", task.status);
       form.setFieldValue("priority", task.priority);
       form.setFieldValue("dueDate", task.dueDate ? task.dueDate.split("T")[0] : "");
@@ -152,6 +155,22 @@ export function EditTaskDialog({
                       {field.state.meta.errors[0]?.toString()}
                     </p>
                   )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="details">
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Details</Label>
+                  <Textarea
+                    id={field.name}
+                    placeholder="Detailed notes (supports markdown)..."
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    rows={6}
+                  />
                 </div>
               )}
             </form.Field>

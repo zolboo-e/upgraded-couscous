@@ -61,6 +61,7 @@ export interface RawStreamChunk {
   external?: number;
   title?: string;
   description?: string | null;
+  details?: string | null;
 }
 
 export interface StreamChunkMetadata {
@@ -98,7 +99,7 @@ export interface StreamChunk {
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
   sessionStatus?: SessionRestoreStatusValue;
   memoryStats?: MemoryStats;
-  taskUpdate?: { title?: string; description?: string | null };
+  taskUpdate?: { title?: string; description?: string | null; details?: string | null };
 }
 
 export function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
@@ -128,7 +129,7 @@ export function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
       external: raw.external ?? 0,
     };
   } else if (raw.type === "task_updated") {
-    chunk.taskUpdate = { title: raw.title, description: raw.description };
+    chunk.taskUpdate = { title: raw.title, description: raw.description, details: raw.details };
   }
 
   return chunk;

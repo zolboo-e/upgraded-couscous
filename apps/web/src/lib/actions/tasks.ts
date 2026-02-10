@@ -12,6 +12,7 @@ export interface TaskSummary {
   projectId: string;
   title: string;
   description: string | null;
+  details: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string | null;
@@ -50,6 +51,7 @@ import type { ActionResult } from "../types";
 export interface CreateTaskInput {
   title: string;
   description?: string;
+  details?: string;
   priority?: TaskPriority;
   dueDate?: string;
 }
@@ -75,6 +77,7 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
 export interface UpdateTaskInput {
   title?: string;
   description?: string | null;
+  details?: string | null;
   status?: TaskStatus;
   priority?: TaskPriority;
   dueDate?: string | null;

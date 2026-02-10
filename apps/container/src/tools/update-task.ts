@@ -25,20 +25,25 @@ export function createTaskMcpServer(config: TaskToolConfig): McpSdkServerConfigW
     tools: [
       tool(
         "update_task",
-        "Update the current task's title and/or description. Use this after the user confirms the proposed changes via AskUserQuestion.",
+        "Update the current task's title, description, and/or details. Use this after the user confirms the proposed changes via AskUserQuestion.",
         {
           title: z.string().min(1).max(255).optional(),
           description: z.string().max(2000).nullable().optional(),
+          details: z.string().nullable().optional(),
         },
         async (args) => {
           logger.info("update_task called", { taskId, args });
 
-          if (args.title === undefined && args.description === undefined) {
+          if (
+            args.title === undefined &&
+            args.description === undefined &&
+            args.details === undefined
+          ) {
             return {
               content: [
                 {
                   type: "text" as const,
-                  text: "Error: At least one field (title or description) is required.",
+                  text: "Error: At least one field (title, description, or details) is required.",
                 },
               ],
               isError: true,
@@ -56,6 +61,7 @@ export function createTaskMcpServer(config: TaskToolConfig): McpSdkServerConfigW
               body: JSON.stringify({
                 title: args.title,
                 description: args.description,
+                details: args.details,
               }),
             });
 
@@ -82,6 +88,7 @@ export function createTaskMcpServer(config: TaskToolConfig): McpSdkServerConfigW
               taskId,
               title: args.title,
               description: args.description,
+              details: args.details,
             };
             sendMessage(ws, taskUpdatedMessage, logger);
 
@@ -95,6 +102,9 @@ export function createTaskMcpServer(config: TaskToolConfig): McpSdkServerConfigW
                   ? "description cleared"
                   : `description to "${args.description}"`,
               );
+            }
+            if (args.details !== undefined) {
+              fields.push(args.details === null ? "details cleared" : "details updated");
             }
 
             logger.info("update_task success", { taskId, fields });

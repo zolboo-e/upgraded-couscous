@@ -12,6 +12,7 @@ export class TaskRepository {
         projectId: tasks.projectId,
         title: tasks.title,
         description: tasks.description,
+        details: tasks.details,
         status: tasks.status,
         priority: tasks.priority,
         dueDate: tasks.dueDate,
@@ -27,6 +28,7 @@ export class TaskRepository {
       projectId: row.projectId,
       title: row.title,
       description: row.description,
+      details: row.details,
       status: row.status as TaskStatus,
       priority: row.priority as TaskPriority,
       dueDate: row.dueDate,
@@ -42,6 +44,7 @@ export class TaskRepository {
         projectId: tasks.projectId,
         title: tasks.title,
         description: tasks.description,
+        details: tasks.details,
         status: tasks.status,
         priority: tasks.priority,
         dueDate: tasks.dueDate,
@@ -61,6 +64,7 @@ export class TaskRepository {
       projectId: result.projectId,
       title: result.title,
       description: result.description,
+      details: result.details,
       status: result.status as TaskStatus,
       priority: result.priority as TaskPriority,
       dueDate: result.dueDate,
@@ -73,6 +77,7 @@ export class TaskRepository {
     projectId: string;
     title: string;
     description?: string;
+    details?: string;
     priority?: TaskPriority;
     dueDate?: Date;
   }): Promise<Task> {
@@ -82,6 +87,7 @@ export class TaskRepository {
         projectId: data.projectId,
         title: data.title,
         description: data.description ?? null,
+        details: data.details ?? null,
         priority: data.priority ?? "medium",
         dueDate: data.dueDate ?? null,
       })
@@ -94,6 +100,7 @@ export class TaskRepository {
     data: {
       title?: string;
       description?: string | null;
+      details?: string | null;
       status?: TaskStatus;
       priority?: TaskPriority;
       dueDate?: Date | null;
@@ -108,6 +115,9 @@ export class TaskRepository {
     }
     if (data.description !== undefined) {
       updateData.description = data.description;
+    }
+    if (data.details !== undefined) {
+      updateData.details = data.details;
     }
     if (data.status !== undefined) {
       updateData.status = data.status;

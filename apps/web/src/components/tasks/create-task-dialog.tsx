@@ -39,6 +39,7 @@ export function CreateTaskDialog({
     defaultValues: {
       title: "",
       description: "",
+      details: "",
       priority: "medium" as TaskPriority,
       dueDate: "",
     },
@@ -47,6 +48,7 @@ export function CreateTaskDialog({
       const result = await createTask(projectId, {
         title: value.title.trim(),
         description: value.description.trim() || undefined,
+        details: value.details.trim() || undefined,
         priority: value.priority,
         dueDate: value.dueDate || undefined,
       });
@@ -129,6 +131,22 @@ export function CreateTaskDialog({
                       {field.state.meta.errors[0]?.toString()}
                     </p>
                   )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="details">
+              {(field) => (
+                <div className="grid gap-2">
+                  <Label htmlFor={field.name}>Details (optional)</Label>
+                  <Textarea
+                    id={field.name}
+                    placeholder="Detailed notes (supports markdown)..."
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    rows={6}
+                  />
                 </div>
               )}
             </form.Field>

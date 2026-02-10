@@ -6,6 +6,7 @@ export interface TaskSummary {
   projectId: string;
   title: string;
   description: string | null;
+  details: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: Date | null;
@@ -22,6 +23,7 @@ export interface CreatedTask {
   projectId: string;
   title: string;
   description: string | null;
+  details: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: Date | null;
@@ -34,6 +36,7 @@ export interface UpdatedTask {
   projectId: string;
   title: string;
   description: string | null;
+  details: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: Date | null;
