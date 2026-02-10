@@ -30,7 +30,9 @@ export function PermissionRequestMessage({
           <span className="text-sm font-medium">Tool Permission Requested</span>
         </div>
         <p className="text-sm font-semibold">{content.toolName}</p>
-        <p className="text-sm text-muted-foreground">{getToolDescription(content.toolName)}</p>
+        <p className="text-sm text-amber-700 dark:text-amber-300">
+          {getToolDescription(content.toolName)}
+        </p>
         <pre className="mt-2 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
           {JSON.stringify(content.toolInput, null, 2)}
         </pre>

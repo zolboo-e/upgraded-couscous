@@ -63,7 +63,7 @@ export function AskUserQuestion({ request, onAnswer }: AskUserQuestionProps): Re
           {request.questions.map((q) => (
             <div key={q.question} className="space-y-3">
               <div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <span className="text-xs font-medium text-foreground/60 uppercase tracking-wide">
                   {q.header}
                 </span>
                 <p className="mt-1 font-medium">{q.question}</p>
@@ -82,7 +82,7 @@ export function AskUserQuestion({ request, onAnswer }: AskUserQuestionProps): Re
                     }`}
                   >
                     <p className="font-medium">{opt.label}</p>
-                    <p className="text-sm text-muted-foreground">{opt.description}</p>
+                    <p className="text-sm text-foreground/60">{opt.description}</p>
                   </button>
                 ))}
 
@@ -97,7 +97,7 @@ export function AskUserQuestion({ request, onAnswer }: AskUserQuestionProps): Re
                   }`}
                 >
                   <p className="font-medium">Other</p>
-                  <p className="text-sm text-muted-foreground">Enter a custom response</p>
+                  <p className="text-sm text-foreground/60">Enter a custom response</p>
                 </button>
 
                 {showCustomInput[q.question] && (

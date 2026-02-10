@@ -71,9 +71,9 @@ export function ToolPermissionDialog({
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <p className="text-sm text-muted-foreground">Claude wants to use the following tool:</p>
+            <p className="text-sm text-foreground/70">Claude wants to use the following tool:</p>
             <p className="mt-1 font-semibold">{request.toolName}</p>
-            <p className="text-sm text-muted-foreground">{getToolDescription(request.toolName)}</p>
+            <p className="text-sm text-foreground/70">{getToolDescription(request.toolName)}</p>
           </div>
 
           <div>

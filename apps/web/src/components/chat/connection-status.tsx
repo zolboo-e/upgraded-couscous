@@ -10,8 +10,8 @@ const statusVariants = cva("inline-flex items-center gap-1.5 text-xs font-medium
       connected: "text-green-600",
       connecting: "text-yellow-600",
       disconnected: "text-red-600",
-      not_configured: "text-gray-500",
-      unknown: "text-gray-400",
+      not_configured: "text-gray-500 dark:text-gray-400",
+      unknown: "text-gray-500 dark:text-gray-400",
     },
   },
   defaultVariants: {
@@ -26,7 +26,7 @@ const dotVariants = cva("h-2 w-2 rounded-full", {
       connecting: "bg-yellow-500 animate-pulse",
       disconnected: "bg-red-500",
       not_configured: "bg-gray-400",
-      unknown: "bg-gray-300",
+      unknown: "bg-gray-400 dark:bg-gray-500",
     },
   },
   defaultVariants: {

@@ -15,7 +15,7 @@ export type SessionRestoreStatusValue =
 const statusVariants = cva("inline-flex items-center gap-1.5 text-xs font-medium", {
   variants: {
     status: {
-      unknown: "text-gray-500",
+      unknown: "text-gray-500 dark:text-gray-400",
       restore_started: "text-yellow-600",
       restoring: "text-yellow-600",
       restored: "text-green-600",

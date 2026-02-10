@@ -16,7 +16,9 @@ export function QuestionMessage({ content }: QuestionMessageProps): React.ReactE
         </div>
         {content.questions.map((q) => (
           <div key={`${q.header}-${q.question}`} className="mt-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{q.header}</p>
+            <p className="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">
+              {q.header}
+            </p>
             <p className="font-medium">{q.question}</p>
           </div>
         ))}

@@ -17,7 +17,7 @@ export function ErrorOverlay({ message, onDismiss }: ErrorOverlayProps): React.R
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">{message}</p>
+          <p className="text-sm text-foreground/70">{message}</p>
         </CardContent>
         <CardFooter className="flex justify-end">
           <Button variant="outline" onClick={onDismiss}>

@@ -15,7 +15,7 @@ export function QuestionAnswerMessage({ content }: QuestionAnswerMessageProps): 
         </div>
         {Object.entries(content.answers).map(([question, answer]) => (
           <div key={question} className="text-sm">
-            <span className="text-muted-foreground">{question}: </span>
+            <span className="text-blue-700 dark:text-blue-300">{question}: </span>
             <span>{answer}</span>
           </div>
         ))}
