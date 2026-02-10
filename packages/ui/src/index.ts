@@ -59,6 +59,16 @@ export {
   SelectTrigger,
   SelectValue,
 } from "./components/select.js";
+export {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./components/sheet.js";
 export { Skeleton } from "./components/skeleton.js";
 export {
   Tabs,

@@ -2,7 +2,6 @@ import { ArrowLeft, CheckSquare } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TaskHeader } from "@/components/tasks/task-header";
-import { TaskTabNavigation } from "@/components/tasks/task-tab-navigation";
 import { getTask } from "@/lib/actions/tasks";
 
 interface TaskDetailLayoutProps {
@@ -35,7 +34,6 @@ export default async function TaskDetailLayout({
           <CheckSquare className="h-4 w-4 text-muted-foreground" />
           <TaskHeader task={task} projectId={id} />
         </div>
-        <TaskTabNavigation projectId={id} taskId={taskId} />
       </div>
 
       <div className="min-h-0 flex-1">{children}</div>
