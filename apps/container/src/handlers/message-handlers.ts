@@ -108,6 +108,10 @@ export async function handleStart(
         "AskUserQuestion",
         ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
       ],
+      allowedTools: [
+        // https://platform.claude.com/docs/en/agent-sdk/mcp
+        ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
+      ],
       canUseTool,
       extraArgs:
         !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
