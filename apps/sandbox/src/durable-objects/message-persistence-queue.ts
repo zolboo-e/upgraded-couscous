@@ -6,9 +6,17 @@
 
 import { isRetryableHttpError, withRetry } from "../utils/retry.js";
 
+export type PersistenceMessageType =
+  | "message"
+  | "permission_request"
+  | "permission_response"
+  | "question"
+  | "question_answer";
+
 export interface PersistenceMessage {
   id: string;
   role: "user" | "assistant";
+  type?: PersistenceMessageType;
   content: string;
   metadata?: {
     tokensUsed?: number;
@@ -69,12 +77,14 @@ export class MessagePersistenceQueue {
     role: "user" | "assistant",
     content: string,
     metadata?: PersistenceMessage["metadata"],
+    type?: PersistenceMessageType,
   ): Promise<string | null> {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     const message: PersistenceMessage = {
       id,
       role,
+      type,
       content,
       metadata,
       createdAt: Date.now(),
@@ -191,7 +201,7 @@ export class MessagePersistenceQueue {
               },
               body: JSON.stringify({
                 role: message.role,
-                type: "message",
+                type: message.type ?? "message",
                 content: message.content,
                 metadata: message.metadata,
               }),

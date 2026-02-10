@@ -1,4 +1,3 @@
-import type { Message } from "@repo/db";
 import type { Context } from "hono";
 import type { ChatService } from "../chat/services/chat.service.js";
 import type { TaskRepository } from "../tasks/repositories/task.repository.js";
@@ -31,12 +30,13 @@ export function createInternalHandlers(
         };
       }>();
 
-      let message: Message;
-      if (body.role === "user") {
-        message = await chatService.saveUserMessage(sessionId, body.content);
-      } else {
-        message = await chatService.saveAssistantMessage(sessionId, body.content, body.metadata);
-      }
+      const message = await chatService.saveMessage(
+        sessionId,
+        body.role,
+        body.content,
+        body.type,
+        body.metadata,
+      );
 
       return c.json({ messageId: message.id });
     },

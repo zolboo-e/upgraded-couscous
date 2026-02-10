@@ -17,12 +17,32 @@ import { MessagePersistenceQueue } from "./message-persistence-queue.js";
 import { PendingMessageBuffer } from "./pending-message-buffer.js";
 import { SyncManager } from "./sync-manager.js";
 
+interface PermissionRequestData {
+  requestId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}
+
+interface QuestionRequestData {
+  requestId: string;
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+}
+
 export class SessionDO extends DurableObject<Env> {
   private browserWs: WebSocket | null = null;
   private containerWs: WebSocket | null = null;
   private sandbox: Sandbox | null = null;
   private sessionId: string | null = null;
   private assistantContent = "";
+
+  // Pending permission/question requests awaiting user response
+  private pendingPermissions = new Map<string, PermissionRequestData>();
+  private pendingQuestions = new Map<string, QuestionRequestData>();
 
   // Robust sync and persistence components
   private syncManager: SyncManager;
@@ -122,6 +142,10 @@ export class SessionDO extends DurableObject<Env> {
       systemPrompt?: string;
       taskId?: string;
       projectId?: string;
+      requestId?: string;
+      decision?: "allow" | "deny";
+      modifiedInput?: Record<string, unknown>;
+      answers?: Record<string, string>;
     };
 
     try {
@@ -146,14 +170,15 @@ export class SessionDO extends DurableObject<Env> {
         this.pendingMessages.add(msg, data.type);
         await this.startContainer({ sessionId: this.sessionId ?? undefined });
       }
+    } else if (data.type === "permission_response" && data.requestId) {
+      this.persistPermissionExchange(data.requestId, data.decision ?? "deny", data.modifiedInput);
+      this.forwardOrQueue(msg, data.type);
+    } else if (data.type === "ask_user_answer" && data.requestId) {
+      this.persistQuestionExchange(data.requestId, data.answers ?? {});
+      this.forwardOrQueue(msg, data.type);
     } else if (this.containerWs?.readyState === WebSocket.OPEN) {
-      // Forward other messages (permission responses, close, etc.)
+      // Forward other messages (close, etc.)
       this.containerWs.send(msg);
-    } else if (data.type === "permission_response" || data.type === "ask_user_answer") {
-      // These messages also need container - queue and restart
-      console.log("[SessionDO] Container not connected, queuing:", data.type);
-      this.pendingMessages.add(msg, data.type);
-      await this.startContainer({ sessionId: this.sessionId ?? undefined });
     }
   }
 
@@ -429,6 +454,10 @@ export class SessionDO extends DurableObject<Env> {
         tokensUsed?: number;
         stopReason?: string;
       };
+      requestId?: string;
+      toolName?: string;
+      toolInput?: Record<string, unknown>;
+      questions?: QuestionRequestData["questions"];
     }
 
     let data: SDKMessageData;
@@ -498,9 +527,74 @@ export class SessionDO extends DurableObject<Env> {
       return;
     }
 
+    // Store pending permission/question requests for persistence on response
+    if (data.type === "tool_permission_request" && data.requestId) {
+      this.pendingPermissions.set(data.requestId, {
+        requestId: data.requestId,
+        toolName: data.toolName ?? "",
+        toolInput: data.toolInput ?? {},
+      });
+    } else if (data.type === "ask_user_question" && data.requestId) {
+      this.pendingQuestions.set(data.requestId, {
+        requestId: data.requestId,
+        questions: data.questions ?? [],
+      });
+    }
+
     // Forward all other messages to browser (including sdk_message)
     if (this.browserWs?.readyState === WebSocket.OPEN) {
       this.browserWs.send(msg);
+    }
+  }
+
+  private persistPermissionExchange(
+    requestId: string,
+    decision: "allow" | "deny",
+    modifiedInput?: Record<string, unknown>,
+  ): void {
+    const request = this.pendingPermissions.get(requestId);
+    if (request) {
+      const requestContent = JSON.stringify(request);
+      const responseContent = JSON.stringify({ requestId, decision, modifiedInput });
+      this.ctx.waitUntil(
+        this.persistenceQueue
+          .enqueue("assistant", requestContent, undefined, "permission_request")
+          .then(() =>
+            this.persistenceQueue.enqueue(
+              "user",
+              responseContent,
+              undefined,
+              "permission_response",
+            ),
+          ),
+      );
+      this.pendingPermissions.delete(requestId);
+    }
+  }
+
+  private persistQuestionExchange(requestId: string, answers: Record<string, string>): void {
+    const question = this.pendingQuestions.get(requestId);
+    if (question) {
+      const questionContent = JSON.stringify(question);
+      const answerContent = JSON.stringify({ requestId, answers });
+      this.ctx.waitUntil(
+        this.persistenceQueue
+          .enqueue("assistant", questionContent, undefined, "question")
+          .then(() =>
+            this.persistenceQueue.enqueue("user", answerContent, undefined, "question_answer"),
+          ),
+      );
+      this.pendingQuestions.delete(requestId);
+    }
+  }
+
+  private async forwardOrQueue(msg: string, type: string): Promise<void> {
+    if (this.containerWs?.readyState === WebSocket.OPEN) {
+      this.containerWs.send(msg);
+    } else {
+      console.log("[SessionDO] Container not connected, queuing:", type);
+      this.pendingMessages.add(msg, type);
+      await this.startContainer({ sessionId: this.sessionId ?? undefined });
     }
   }
 }

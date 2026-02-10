@@ -1,5 +1,6 @@
 import type {
   Message,
+  MessageType,
   PermissionRequestContent,
   PermissionResponseContent,
   QuestionAnswerContent,
@@ -86,6 +87,28 @@ export class ChatService {
     }
 
     await this.repository.deleteSession(sessionId);
+  }
+
+  async saveMessage(
+    sessionId: string,
+    role: "user" | "assistant",
+    content: string,
+    type?: MessageType,
+    metadata?: { model?: string; tokensUsed?: number; stopReason?: string },
+  ): Promise<Message> {
+    const message = await this.repository.createMessage({
+      sessionId,
+      role,
+      type: type ?? "message",
+      content,
+      metadata,
+    });
+
+    if (role === "assistant") {
+      await this.repository.updateSessionTimestamp(sessionId);
+    }
+
+    return message;
   }
 
   async saveUserMessage(sessionId: string, content: string): Promise<Message> {
