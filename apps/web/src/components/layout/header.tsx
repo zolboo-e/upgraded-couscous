@@ -1,6 +1,7 @@
 import { Button } from "@repo/ui";
 import Link from "next/link";
 import { getCurrentUserWithCompany } from "@/lib/actions/auth";
+import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 
 export async function Header(): Promise<React.ReactElement> {
@@ -22,10 +23,12 @@ export async function Header(): Promise<React.ReactElement> {
               <Link href="/organization" className="text-sm hover:text-primary">
                 Organization
               </Link>
+              <ThemeToggle />
               <UserMenu user={userData.user} company={userData.company} />
             </div>
           ) : (
             <div className="flex items-center gap-2">
+              <ThemeToggle />
               <Button variant="ghost" asChild>
                 <Link href="/login">Sign in</Link>
               </Button>
