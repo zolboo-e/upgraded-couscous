@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
+import { API_BASE_URL } from "@/lib/api/client";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxyRequest(request: NextRequest, path: string): Promise<Response> {
   const cookieStore = await cookies();
@@ -38,42 +39,13 @@ async function proxyRequest(request: NextRequest, path: string): Promise<Respons
   });
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-): Promise<Response> {
+async function handler(request: NextRequest, { params }: RouteContext): Promise<Response> {
   const { path } = await params;
   return proxyRequest(request, `/${path.join("/")}`);
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-): Promise<Response> {
-  const { path } = await params;
-  return proxyRequest(request, `/${path.join("/")}`);
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-): Promise<Response> {
-  const { path } = await params;
-  return proxyRequest(request, `/${path.join("/")}`);
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-): Promise<Response> {
-  const { path } = await params;
-  return proxyRequest(request, `/${path.join("/")}`);
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-): Promise<Response> {
-  const { path } = await params;
-  return proxyRequest(request, `/${path.join("/")}`);
-}
+export const GET = handler;
+export const POST = handler;
+export const PUT = handler;
+export const DELETE = handler;
+export const PATCH = handler;

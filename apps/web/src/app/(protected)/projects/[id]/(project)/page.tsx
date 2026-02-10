@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
-import { getProjectById } from "@/lib/actions/projects";
+import { getCachedProjectById } from "@/lib/actions/cached";
 import { getProjectTasks } from "@/lib/actions/tasks";
 
 interface ProjectPageProps {
@@ -12,7 +12,7 @@ export default async function ProjectPage({
 }: ProjectPageProps): Promise<React.ReactElement> {
   const { id } = await params;
 
-  const [project, tasksResult] = await Promise.all([getProjectById(id), getProjectTasks(id)]);
+  const [project, tasksResult] = await Promise.all([getCachedProjectById(id), getProjectTasks(id)]);
 
   if (!project) {
     notFound();

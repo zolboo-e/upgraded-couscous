@@ -1,7 +1,12 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@repo/ui";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { RegisterForm } from "@/components/auth/register-form";
+
+export const metadata: Metadata = {
+  title: "Create Account",
+};
 
 export default function RegisterPage(): React.ReactElement {
   return (

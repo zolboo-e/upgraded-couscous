@@ -3,7 +3,7 @@
 import { Button } from "@repo/ui";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { TaskStatus, TaskSummary } from "@/lib/actions/tasks";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { KanbanColumn } from "./kanban-column";
@@ -19,24 +19,19 @@ export function KanbanBoard({ projectId, tasks }: KanbanBoardProps): React.React
   const router = useRouter();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  const tasksByStatus = useMemo(() => {
-    const grouped: Record<TaskStatus, TaskSummary[]> = {
-      todo: [],
-      in_progress: [],
-      done: [],
-      cancelled: [],
-    };
+  const tasksByStatus: Record<TaskStatus, TaskSummary[]> = {
+    todo: tasks.filter((t) => t.status === "todo"),
+    in_progress: tasks.filter((t) => t.status === "in_progress"),
+    done: tasks.filter((t) => t.status === "done"),
+    cancelled: tasks.filter((t) => t.status === "cancelled"),
+  };
 
-    for (const task of tasks) {
-      grouped[task.status].push(task);
-    }
-
-    return grouped;
-  }, [tasks]);
-
-  function handleTaskClick(task: TaskSummary): void {
-    router.push(`/projects/${projectId}/tasks/${task.id}`);
-  }
+  const handleTaskClick = useCallback(
+    (task: TaskSummary): void => {
+      router.push(`/projects/${projectId}/tasks/${task.id}`);
+    },
+    [router, projectId],
+  );
 
   return (
     <div className="space-y-4">

@@ -1,8 +1,8 @@
 "use client";
 
-import type { MemoryStats } from "./chat-detail";
 import { ConnectionStatus, type ConnectionStatusValue } from "./connection-status";
 import { SessionRestoreStatus, type SessionRestoreStatusValue } from "./session-restore-status";
+import type { MemoryStats } from "./stream-types";
 
 export type ServerStatus = "connected" | "disconnected" | "connecting";
 export type AgentStatus =

@@ -82,7 +82,7 @@ export async function login(
       error: error instanceof Error ? error.message : "Login failed",
     };
   }
-  redirect(callbackUrl ?? "/organization");
+  redirect(callbackUrl ?? "/projects");
 }
 
 export async function register(
@@ -98,7 +98,7 @@ export async function register(
       error: error instanceof Error ? error.message : "Registration failed",
     };
   }
-  redirect(callbackUrl ?? "/organization");
+  redirect(callbackUrl ?? "/projects");
 }
 
 export async function logout(): Promise<never> {

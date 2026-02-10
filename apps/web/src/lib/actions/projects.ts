@@ -27,10 +27,7 @@ export async function getProjects(): Promise<ProjectsListResult | null> {
   }
 }
 
-export interface ActionResult {
-  success: boolean;
-  error?: string;
-}
+import type { ActionResult } from "../types";
 
 export async function createProject(name: string, description?: string): Promise<ActionResult> {
   try {

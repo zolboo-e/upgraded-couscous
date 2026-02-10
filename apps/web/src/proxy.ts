@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const GUEST_ROUTES = ["/login", "/register"];
-const PROTECTED_ROUTE_PREFIXES = ["/chats"];
+const PROTECTED_ROUTE_PREFIXES = ["/chats", "/projects", "/organization"];
 
 function isGuestRoute(pathname: string): boolean {
   return GUEST_ROUTES.includes(pathname);
@@ -40,5 +40,5 @@ export function proxy(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/login", "/register", "/chats/:path*"],
+  matcher: ["/login", "/register", "/chats/:path*", "/projects/:path*", "/organization/:path*"],
 };

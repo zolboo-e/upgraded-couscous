@@ -24,10 +24,7 @@ export interface Organization {
   updatedAt: string;
 }
 
-export interface ActionResult {
-  success: boolean;
-  error?: string;
-}
+import type { ActionResult } from "../types";
 
 export async function getOrganization(): Promise<Organization | null> {
   try {

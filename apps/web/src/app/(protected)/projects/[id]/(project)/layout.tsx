@@ -3,7 +3,7 @@ import { ArrowLeft, FolderOpen } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProjectTabNavigation } from "@/components/projects/project-tab-navigation";
-import { getProjectById } from "@/lib/actions/projects";
+import { getCachedProjectById } from "@/lib/actions/cached";
 
 interface ProjectChromeLayoutProps {
   children: React.ReactNode;
@@ -16,7 +16,7 @@ export default async function ProjectChromeLayout({
 }: ProjectChromeLayoutProps): Promise<React.ReactElement> {
   const { id } = await params;
 
-  const project = await getProjectById(id);
+  const project = await getCachedProjectById(id);
   if (!project) {
     notFound();
   }

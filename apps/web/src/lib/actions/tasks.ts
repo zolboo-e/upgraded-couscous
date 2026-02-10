@@ -45,10 +45,7 @@ export async function getProjectTasks(projectId: string): Promise<TasksListResul
   }
 }
 
-export interface ActionResult {
-  success: boolean;
-  error?: string;
-}
+import type { ActionResult } from "../types";
 
 export interface CreateTaskInput {
   title: string;

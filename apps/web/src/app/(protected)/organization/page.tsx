@@ -1,19 +1,21 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { MemberList } from "@/components/organization/member-list";
 import { OrganizationHeader } from "@/components/organization/organization-header";
 import { getCurrentUserWithCompany } from "@/lib/actions/auth";
 import { getOrganization } from "@/lib/actions/organization";
 
+export const metadata: Metadata = {
+  title: "Organization",
+};
+
 export default async function OrganizationPage(): Promise<React.ReactElement> {
-  const userData = await getCurrentUserWithCompany();
+  const [userData, organization] = await Promise.all([
+    getCurrentUserWithCompany(),
+    getOrganization(),
+  ]);
 
-  if (!userData?.company) {
-    redirect("/");
-  }
-
-  const organization = await getOrganization();
-
-  if (!organization) {
+  if (!userData?.company || !organization) {
     redirect("/");
   }
 

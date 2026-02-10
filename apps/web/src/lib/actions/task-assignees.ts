@@ -3,7 +3,7 @@
 import { parseResponse } from "hono/client";
 import { revalidatePath } from "next/cache";
 import { api } from "../api/client";
-import type { ActionResult } from "./tasks";
+import type { ActionResult } from "../types";
 
 export interface TaskAssignee {
   id: string;

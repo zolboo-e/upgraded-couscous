@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ProjectInfoTab } from "@/components/projects/project-info-tab";
-import { getProjectById, getProjectMembers } from "@/lib/actions/projects";
+import { getCachedProjectById, getCachedProjectMembers } from "@/lib/actions/cached";
 
 interface InfoPageProps {
   params: Promise<{ id: string }>;
@@ -9,7 +9,10 @@ interface InfoPageProps {
 export default async function InfoPage({ params }: InfoPageProps): Promise<React.ReactElement> {
   const { id } = await params;
 
-  const [project, membersResult] = await Promise.all([getProjectById(id), getProjectMembers(id)]);
+  const [project, membersResult] = await Promise.all([
+    getCachedProjectById(id),
+    getCachedProjectMembers(id),
+  ]);
 
   if (!project) {
     notFound();

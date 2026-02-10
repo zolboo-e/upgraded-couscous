@@ -1,7 +1,7 @@
 import type { AppType } from "@repo/api/client";
 import { hc } from "hono/client";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 function isServer(): boolean {
   return typeof window === "undefined";

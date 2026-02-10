@@ -1,8 +1,6 @@
 import { parseResponse } from "hono/client";
 import { getSessionToken } from "../actions/auth";
-import { api } from "./client";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { API_BASE_URL, api } from "./client";
 
 // Sandbox WebSocket URL for direct connection (bypasses API)
 export const SANDBOX_WS_URL = process.env.NEXT_PUBLIC_SANDBOX_WS_URL;
@@ -84,12 +82,15 @@ export interface QuestionAnswerContent {
   answers: Record<string, string>;
 }
 
-export async function listChatSessions() {
+export async function listChatSessions(): Promise<ChatSession[]> {
   const data = await parseResponse(api.chat.sessions.$get());
   return data.data;
 }
 
-export async function createChatSession(input?: { title?: string; systemPrompt?: string }) {
+export async function createChatSession(input?: {
+  title?: string;
+  systemPrompt?: string;
+}): Promise<ChatSession> {
   const data = await parseResponse(api.chat.sessions.$post({ json: input ?? {} }));
   return data.data;
 }
@@ -98,12 +99,12 @@ export async function deleteChatSession(id: string): Promise<void> {
   await parseResponse(api.chat.sessions[":id"].$delete({ param: { id } }));
 }
 
-export async function getChatSession(id: string) {
+export async function getChatSession(id: string): Promise<ChatSessionWithMessages> {
   const data = await parseResponse(api.chat.sessions[":id"].$get({ param: { id } }));
   return data.data;
 }
 
-export async function getTaskSession(taskId: string) {
+export async function getTaskSession(taskId: string): Promise<ChatSession> {
   const data = await parseResponse(api.chat.sessions.task[":taskId"].$get({ param: { taskId } }));
   return data.data;
 }

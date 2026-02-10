@@ -1,19 +1,18 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ProjectList } from "@/components/projects/project-list";
 import { ProjectsHeader } from "@/components/projects/projects-header";
 import { getCurrentUserWithCompany } from "@/lib/actions/auth";
 import { getProjects } from "@/lib/actions/projects";
 
+export const metadata: Metadata = {
+  title: "Projects",
+};
+
 export default async function ProjectsPage(): Promise<React.ReactElement> {
-  const userData = await getCurrentUserWithCompany();
+  const [userData, result] = await Promise.all([getCurrentUserWithCompany(), getProjects()]);
 
-  if (!userData?.company) {
-    redirect("/");
-  }
-
-  const result = await getProjects();
-
-  if (!result) {
+  if (!userData?.company || !result) {
     redirect("/");
   }
 
