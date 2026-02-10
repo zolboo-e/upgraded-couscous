@@ -23,8 +23,19 @@ export function PermissionResponseMessage({
         )}
       >
         <div className="flex items-center gap-2">
-          <span>{isAllowed ? "✓" : "✗"}</span>
-          <span className="text-sm font-medium">
+          <span
+            className={
+              isAllowed ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"
+            }
+          >
+            {isAllowed ? "✓" : "✗"}
+          </span>
+          <span
+            className={cn(
+              "text-sm font-medium",
+              isAllowed ? "text-green-800 dark:text-green-300" : "text-red-800 dark:text-red-300",
+            )}
+          >
             {isAllowed ? "Permission Granted" : "Permission Denied"}
           </span>
         </div>
