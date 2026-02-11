@@ -131,6 +131,7 @@ export async function handleStart(
   // Send initial message if provided
   if (message.content) {
     sessionQueue.enqueue(ws, createUserMessage(message.content, message.sessionId ?? ""));
+    sendMessage(ws, { type: "agent_status", status: "pending" }, logger);
   }
 }
 
