@@ -61,7 +61,8 @@ export type OutgoingMessage =
       type: "ask_user_question";
       requestId: string;
       questions: QuestionItem[];
-    };
+    }
+  | { type: "agent_status"; status: "pending" };
 
 /**
  * State tracked for each WebSocket session

@@ -54,7 +54,7 @@ export interface RawStreamChunk {
   toolInput?: Record<string, unknown>;
   questions?: QuestionItem[];
   sandboxStatus?: "connected" | "disconnected" | "connecting" | "not_configured";
-  status?: SessionRestoreStatusValue;
+  status?: string;
   heapUsed?: number;
   heapTotal?: number;
   rss?: number;
@@ -86,7 +86,8 @@ export interface StreamChunk {
     | "sdk_message"
     | "session_status"
     | "memory_stats"
-    | "task_updated";
+    | "task_updated"
+    | "agent_status";
   content?: string;
   messageId?: string;
   metadata?: StreamChunkMetadata;
@@ -100,6 +101,7 @@ export interface StreamChunk {
   sessionStatus?: SessionRestoreStatusValue;
   memoryStats?: MemoryStats;
   taskUpdate?: { title?: string; description?: string | null; details?: string | null };
+  agentStatus?: string;
 }
 
 export function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
@@ -120,7 +122,9 @@ export function parseStreamChunk(raw: RawStreamChunk): StreamChunk {
   } else if (raw.type === "error" && typeof raw.message === "string") {
     chunk.errorMessage = raw.message;
   } else if (raw.type === "session_status" && raw.status) {
-    chunk.sessionStatus = raw.status;
+    chunk.sessionStatus = raw.status as SessionRestoreStatusValue;
+  } else if (raw.type === "agent_status" && raw.status) {
+    chunk.agentStatus = raw.status;
   } else if (raw.type === "memory_stats" && raw.heapUsed !== undefined) {
     chunk.memoryStats = {
       heapUsed: raw.heapUsed,

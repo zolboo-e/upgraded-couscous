@@ -156,6 +156,7 @@ export function handleUserMessage(
   if (message.content) {
     logger.info("Pushing message to Claude queue");
     sessionQueue.enqueue(ws, createUserMessage(message.content, session.sessionId ?? ""));
+    sendMessage(ws, { type: "agent_status", status: "pending" }, logger);
   }
 }
 

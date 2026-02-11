@@ -7,6 +7,7 @@ import { ChatInput } from "./chat-input";
 import { ChatMessage, StreamingMessage } from "./chat-message";
 import { ConnectionStatusBar } from "./connection-status-bar";
 import { ErrorOverlay } from "./error-overlay";
+import { PendingIndicator } from "./pending-indicator";
 import { ToolPermissionDialog } from "./tool-permission-dialog";
 import { useChatWebSocket } from "./use-chat-websocket";
 
@@ -36,6 +37,7 @@ export function ChatDetail({
     error,
     streamingContent,
     isStreaming,
+    isPending,
     pendingPermission,
     pendingQuestion,
     serverStatus,
@@ -53,7 +55,7 @@ export function ChatDetail({
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when messages or content changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, streamingContent]);
+  }, [messages.length, streamingContent, isPending]);
 
   if (isLoading) {
     return (
@@ -100,6 +102,7 @@ export function ChatDetail({
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
+          {isPending && !isStreaming && <PendingIndicator />}
           {isStreaming && streamingContent && <StreamingMessage content={streamingContent} />}
           <div ref={messagesEndRef} />
         </div>
@@ -107,7 +110,7 @@ export function ChatDetail({
 
       <div className="border-t p-4">
         <div className="mx-auto max-w-3xl">
-          <ChatInput onSend={sendMessage} disabled={isStreaming} />
+          <ChatInput onSend={sendMessage} disabled={isStreaming || isPending} />
         </div>
       </div>
 

@@ -30,6 +30,7 @@ interface UseChatWebSocketResult {
   error: string | null;
   streamingContent: string;
   isStreaming: boolean;
+  isPending: boolean;
   pendingPermission: ToolPermissionRequest | null;
   pendingQuestion: AskUserQuestionRequest | null;
   serverStatus: ServerStatus;
@@ -54,6 +55,7 @@ export function useChatWebSocket({
   const [error, setError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<ToolPermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<AskUserQuestionRequest | null>(null);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("disconnected");
@@ -97,6 +99,7 @@ export function useChatWebSocket({
           if (sdkMsg?.type === "assistant" && sdkMsg.message?.content) {
             if (!streamingContentRef.current) {
               setIsStreaming(true);
+              setIsPending(false);
             }
             for (const block of sdkMsg.message.content) {
               if (block.type === "text" && block.text) {
@@ -110,11 +113,13 @@ export function useChatWebSocket({
 
         case "stream_start":
           setIsStreaming(true);
+          setIsPending(false);
           streamingContentRef.current = "";
           setStreamingContent("");
           break;
 
         case "chunk":
+          setIsPending(false);
           streamingContentRef.current += chunk.content ?? "";
           setStreamingContent(streamingContentRef.current);
           break;
@@ -138,6 +143,7 @@ export function useChatWebSocket({
           streamingContentRef.current = "";
           setStreamingContent("");
           setIsStreaming(false);
+          setIsPending(false);
           break;
 
         case "error":
@@ -145,9 +151,11 @@ export function useChatWebSocket({
           streamingContentRef.current = "";
           setStreamingContent("");
           setIsStreaming(false);
+          setIsPending(false);
           break;
 
         case "tool_permission_request":
+          setIsPending(false);
           if (chunk.requestId && chunk.toolName && chunk.toolInput) {
             const permMsg: ChatMessageType = {
               id: crypto.randomUUID(),
@@ -171,6 +179,7 @@ export function useChatWebSocket({
           break;
 
         case "ask_user_question":
+          setIsPending(false);
           if (chunk.requestId && chunk.questions) {
             const qMsg: ChatMessageType = {
               id: crypto.randomUUID(),
@@ -207,6 +216,10 @@ export function useChatWebSocket({
           if (chunk.memoryStats) {
             setMemoryStats(chunk.memoryStats);
           }
+          break;
+
+        case "agent_status":
+          setIsPending(chunk.agentStatus === "pending");
           break;
 
         case "task_updated":
@@ -253,8 +266,14 @@ export function useChatWebSocket({
       });
 
       ws.addEventListener("message", handleMessage);
-      ws.addEventListener("close", () => setServerStatus("disconnected"));
-      ws.addEventListener("error", () => setServerStatus("disconnected"));
+      ws.addEventListener("close", () => {
+        setServerStatus("disconnected");
+        setIsPending(false);
+      });
+      ws.addEventListener("error", () => {
+        setServerStatus("disconnected");
+        setIsPending(false);
+      });
     };
 
     connectWebSocket();
@@ -266,6 +285,7 @@ export function useChatWebSocket({
       }
       setServerStatus("disconnected");
       setAgentStatus("unknown");
+      setIsPending(false);
     };
   }, [sessionId, isLoading, error, session, taskId, projectId, queryClient]);
 
@@ -344,6 +364,7 @@ export function useChatWebSocket({
     error,
     streamingContent,
     isStreaming,
+    isPending,
     pendingPermission,
     pendingQuestion,
     serverStatus,
