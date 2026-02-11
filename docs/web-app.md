@@ -10,11 +10,20 @@ apps/web/src/
 │   ├── (public)/           # Public pages (homepage)
 │   ├── (guest)/            # Auth pages (login, register)
 │   ├── (protected)/        # Authenticated routes
+│   │   ├── chats/          # Chat sessions
+│   │   ├── organization/   # Organization management
+│   │   └── projects/       # Project & task management
+│   │       └── [id]/
+│   │           ├── (project)/    # Project detail views
+│   │           │   └── info/     # Project info tab
+│   │           └── tasks/[taskId]/ # Task detail page
 │   └── api/proxy/          # API proxy route
 ├── components/
 │   ├── auth/               # Login, register, logout
 │   ├── chat/               # Chat UI (20+ components)
 │   ├── organization/       # Member management
+│   ├── projects/           # Project management UI
+│   ├── tasks/              # Task management UI
 │   └── layout/             # Header, navigation
 ├── lib/
 │   ├── api/                # Hono RPC client
@@ -25,14 +34,18 @@ apps/web/src/
 
 ## Routes
 
-| Path            | Route Group | Component    | Auth        |
-| --------------- | ----------- | ------------ | ----------- |
-| `/`             | (public)    | HomePage     | No          |
-| `/login`        | (guest)     | LoginForm    | No          |
-| `/register`     | (guest)     | RegisterForm | No          |
-| `/chats`        | (protected) | ChatList     | Yes         |
-| `/chats/[id]`   | (protected) | ChatDetail   | Yes         |
-| `/organization` | (protected) | MemberList   | Yes (Admin) |
+| Path                              | Route Group | Component      | Auth        |
+| --------------------------------- | ----------- | -------------- | ----------- |
+| `/`                               | (public)    | HomePage       | No          |
+| `/login`                          | (guest)     | LoginForm      | No          |
+| `/register`                       | (guest)     | RegisterForm   | No          |
+| `/chats`                          | (protected) | ChatList       | Yes         |
+| `/chats/[id]`                     | (protected) | ChatDetail     | Yes         |
+| `/organization`                   | (protected) | MemberList     | Yes (Admin) |
+| `/projects`                       | (protected) | ProjectList    | Yes         |
+| `/projects/[id]`                  | (protected) | KanbanBoard    | Yes         |
+| `/projects/[id]/info`             | (protected) | ProjectInfo    | Yes         |
+| `/projects/[id]/tasks/[taskId]`   | (protected) | TaskDetail     | Yes         |
 
 Route groups control layouts:
 
@@ -72,6 +85,38 @@ Route groups control layouts:
 | `edit-member-dialog.tsx`   | Update member role           |
 | `remove-member-dialog.tsx` | Remove member confirmation   |
 
+### Project Management (`components/projects/`)
+
+| Component                      | Purpose                                 |
+| ------------------------------ | --------------------------------------- |
+| `project-list.tsx`             | List of all projects                    |
+| `project-card.tsx`             | Individual project card                 |
+| `projects-header.tsx`          | Page header with create button          |
+| `projects-empty-state.tsx`     | Empty state when no projects exist      |
+| `create-project-dialog.tsx`    | Create project form                     |
+| `project-tab-navigation.tsx`   | Toggle between Kanban and Info tabs     |
+| `project-info-tab.tsx`         | Project information tab content         |
+| `project-members-section.tsx`  | Project member list and management      |
+
+### Task Management (`components/tasks/`)
+
+| Component                    | Purpose                                       |
+| ---------------------------- | --------------------------------------------- |
+| `kanban-board.tsx`           | Kanban board with 4 columns                   |
+| `kanban-column.tsx`          | Individual column (todo/in_progress/done/cancelled) |
+| `task-card.tsx`              | Task card in Kanban board                     |
+| `task-card-skeleton.tsx`     | Loading skeleton for task cards               |
+| `task-split-layout.tsx`      | Two-panel layout (chat + details)             |
+| `task-detail-info.tsx`       | Task details edit panel                       |
+| `task-chat.tsx`              | Chat interface for task context               |
+| `task-header.tsx`            | Task header with navigation                   |
+| `task-priority-badge.tsx`    | Priority display badge                        |
+| `task-assignees-section.tsx` | Assignee list and management                  |
+| `add-assignee-dialog.tsx`    | Add assignee dialog                           |
+| `create-task-dialog.tsx`     | Create task form                              |
+| `edit-task-dialog.tsx`       | Edit task form                                |
+| `delete-task-dialog.tsx`     | Delete confirmation dialog                    |
+
 ## API Integration
 
 ### Hono RPC Client (`lib/api/client.ts`)
@@ -92,6 +137,9 @@ const data = await response.json();
 
 - `auth.ts` - `getCurrentUser()`, `login()`, `logout()`
 - `organization.ts` - `getOrganization()`, member management
+- `projects.ts` - `getProjects()`, `getProjectById()`, `createProject()`, `getProjectMembers()`
+- `tasks.ts` - `getProjectTasks()`, `getTask()`, `createTask()`, `updateTask()`, `deleteTask()`
+- `task-assignees.ts` - `getTaskAssignees()`, `addTaskAssignee()`, `removeTaskAssignee()`
 
 ### API Proxy (`app/api/proxy/[...path]/route.ts`)
 

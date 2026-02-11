@@ -361,6 +361,9 @@ ws.addEventListener("open", () => {
       type: "start",
       sessionId,
       ...(session?.systemPrompt && { systemPrompt: session.systemPrompt }),
+      // Optional: link session to a task for MCP tool access
+      ...(taskId && { taskId }),
+      ...(projectId && { projectId }),
     }),
   );
 });
@@ -486,6 +489,10 @@ export function handleUserMessage(
   }
 }
 ```
+
+When `taskId` is present in the `start` message, the container creates an MCP task tool server that allows Claude to update task fields (title, description, details) via the internal API.
+
+The container also handles `permission_response` and `ask_user_answer` messages from the browser, routing them through `PermissionRegistry` and `QuestionRegistry` respectively to resolve pending tool permission and question Promises in the Claude SDK.
 
 The message queue feeds an async generator that the Claude SDK consumes:
 
@@ -784,6 +791,8 @@ const claudeQuery = query({
 | `session_status`          | Restore/sync progress (see table below)                    |
 | `tool_permission_request` | Request permission for tool                                |
 | `ask_user_question`       | Claude asking user a question                              |
+| `agent_status`            | Agent processing status ("pending")                        |
+| `task_updated`            | Task fields updated by agent (taskId, title, etc.)         |
 | `memory_stats`            | Container memory usage                                     |
 
 ### Session Status Values

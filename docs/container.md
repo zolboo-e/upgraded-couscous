@@ -11,13 +11,19 @@ apps/container/src/
 │   └── env.ts                  # Environment configuration
 ├── handlers/
 │   ├── message-handlers.ts     # WebSocket message routing
-│   └── claude-processor.ts     # Claude SDK message processing
+│   ├── claude-processor.ts     # Claude SDK message processing
+│   └── permission-handler.ts   # Permission/question routing
 ├── websocket/
 │   └── send.ts                 # WebSocket send utility
 ├── session/
 │   ├── message-queue.ts        # Per-session async message queue
 │   ├── message-factory.ts      # SDK message creation
-│   └── session-check.ts        # Session existence verification
+│   ├── session-check.ts        # Session existence verification
+│   ├── permission-registry.ts  # Tool permission request management
+│   └── question-registry.ts    # User question request management
+├── tools/
+│   ├── index.ts                # MCP tool exports
+│   └── update-task.ts          # Task update MCP server
 ├── services/
 │   ├── logger.ts               # Logger with telemetry
 │   ├── telemetry.ts            # Upstash Redis client
@@ -42,25 +48,29 @@ apps/container/src/
 
 ### Incoming (Browser → Container)
 
-| Type                  | Description                 |
-| --------------------- | --------------------------- |
-| `start`               | Initialize Claude query     |
-| `message`             | User chat message           |
-| `permission_response` | Tool permission decision    |
-| `ask_user_answer`     | Answer to Claude's question |
-| `close`               | Graceful disconnect         |
+| Type                  | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `start`               | Initialize Claude query (includes optional `taskId`, `projectId`) |
+| `message`             | User chat message                                            |
+| `permission_response` | Tool permission decision (requestId, decision, modifiedInput) |
+| `ask_user_answer`     | Answer to Claude's question (requestId, answers)             |
+| `close`               | Graceful disconnect                                          |
 
 ### Outgoing (Container → Browser)
 
-| Type           | Description                     |
-| -------------- | ------------------------------- |
-| `sdk_message`  | Raw Claude SDK messages         |
-| `stream_start` | Begin streaming                 |
-| `chunk`        | Text content chunk              |
-| `stream_end`   | End streaming                   |
-| `done`         | Response complete with metadata |
-| `error`        | Error message                   |
-| `memory_stats` | Memory usage (heap, RSS)        |
+| Type                       | Description                                       |
+| -------------------------- | ------------------------------------------------- |
+| `sdk_message`              | Raw Claude SDK messages                           |
+| `stream_start`             | Begin streaming                                   |
+| `chunk`                    | Text content chunk                                |
+| `stream_end`               | End streaming                                     |
+| `done`                     | Response complete with metadata                   |
+| `error`                    | Error message                                     |
+| `memory_stats`             | Memory usage (heap, RSS)                          |
+| `agent_status`             | Agent processing status (e.g., "pending")         |
+| `task_updated`             | Task fields updated by agent                      |
+| `tool_permission_request`  | Request tool permission from frontend             |
+| `ask_user_question`        | Forward Claude's question to frontend             |
 
 ## Claude Agent SDK Integration
 
@@ -86,6 +96,51 @@ const claudeQuery = query({
 | Resume session | `resume: id`                      |
 
 Session existence checked by looking for files in `/root/.claude/`.
+
+## MCP Task Tools
+
+**File:** `src/tools/update-task.ts`
+
+When a session is linked to a task (`taskId` present in `start` message), the container creates an MCP server that gives Claude the ability to update task fields.
+
+- **Tool name:** `mcp__task-tools__update_task`
+- **Created when:** `taskId`, `API_BASE_URL`, and `INTERNAL_API_TOKEN` are all available
+- **Updatable fields:** `title`, `description`, `details`
+- **Endpoint:** `PATCH {API_BASE_URL}/internal/tasks/{taskId}` with `X-Service-Token` header
+- **On success:** Sends `task_updated` message to browser with updated fields
+
+```typescript
+// MCP tools are conditionally added to the Claude query
+const hasTaskTools = !!(message.taskId && apiBaseUrl && apiToken);
+const mcpServers = hasTaskTools
+  ? { "task-tools": createTaskMcpServer({ taskId, apiBaseUrl, apiToken, ws, logger }) }
+  : undefined;
+
+// Tools must appear in both arrays
+tools: [...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : [])],
+allowedTools: [...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : [])],
+```
+
+## Permission & Question Handling
+
+The container mediates between Claude's tool permission requests and the browser frontend.
+
+### PermissionRegistry (`session/permission-registry.ts`)
+
+Promise-based request/response pattern for tool permissions. When Claude requests to use a tool, a pending Promise is created and the request is forwarded to the browser. The Promise resolves when the browser sends a `permission_response` message.
+
+### QuestionRegistry (`session/question-registry.ts`)
+
+Same pattern for `AskUserQuestion` tool responses. When Claude asks the user a question, a pending Promise is created and questions are forwarded to the browser. The Promise resolves when the browser sends an `ask_user_answer` message.
+
+### PermissionHandler (`handlers/permission-handler.ts`)
+
+Routes permission requests differently based on tool type:
+
+- **`AskUserQuestion` tool:** Sends `ask_user_question` message to browser, awaits answer via `QuestionRegistry`, returns answers as `updatedInput`
+- **All other tools:** Sends `tool_permission_request` message to browser, awaits decision via `PermissionRegistry`, returns allow/deny
+
+Both registries clean up pending requests on WebSocket disconnect.
 
 ## Message Handling Pipeline
 
@@ -113,18 +168,25 @@ handleMessage() routes by type
       │
       ├─► "start" → handleStart()
       │              └─► Initialize queue + Claude query
+      │                  (+ MCP task tools if taskId present)
       │
-      └─► "message" → handleUserMessage()
-                      └─► sessionQueue.enqueue()
-                              │
-                              ▼
-                      Claude SDK processes
-                              │
-                              ▼
-                      processClaudeMessages()
-                              │
-                              ▼
-                      sendMessage() to browser
+      ├─► "message" → handleUserMessage()
+      │               └─► sessionQueue.enqueue()
+      │                       │
+      │                       ▼
+      │               Claude SDK processes
+      │                       │
+      │                       ▼
+      │               processClaudeMessages()
+      │                       │
+      │                       ▼
+      │               sendMessage() to browser
+      │
+      ├─► "permission_response" → permissionRegistry.resolve()
+      │
+      ├─► "ask_user_answer" → questionRegistry.resolve()
+      │
+      └─► "close" → cleanup registries + close connection
 ```
 
 ## Session Persistence
@@ -174,12 +236,14 @@ Sends memory stats to client every 1000ms:
 
 ## Environment Variables
 
-| Variable              | Default                    | Description                   |
-| --------------------- | -------------------------- | ----------------------------- |
-| `CLAUDE_MODEL`        | `claude-sonnet-4-20250514` | Claude model ID               |
-| `ENVIRONMENT`         | -                          | "production" enables R2 sync  |
-| `UPSTASH_REDIS_URL`   | -                          | Telemetry endpoint (optional) |
-| `UPSTASH_REDIS_TOKEN` | -                          | Telemetry auth (optional)     |
+| Variable              | Default                    | Description                          |
+| --------------------- | -------------------------- | ------------------------------------ |
+| `CLAUDE_MODEL`        | `claude-sonnet-4-20250514` | Claude model ID                      |
+| `ENVIRONMENT`         | -                          | "production" enables R2 sync         |
+| `API_BASE_URL`        | -                          | API server URL (for MCP task tools)  |
+| `INTERNAL_API_TOKEN`  | -                          | Service token (for MCP task tools)   |
+| `UPSTASH_REDIS_URL`   | -                          | Telemetry endpoint (optional)        |
+| `UPSTASH_REDIS_TOKEN` | -                          | Telemetry auth (optional)            |
 
 ## Configuration
 
@@ -194,7 +258,8 @@ SERVER_CONFIG = {
 SYNC_CONFIG = {
   basePath: "/persistent",
   localPath: "/root/.claude",
-  directories: ["projects", "todos"],
+  projectsDir: "projects",
+  todosDir: "todos",
 };
 ```
 
@@ -214,15 +279,19 @@ Multi-stage build:
 
 ## Key Files Reference
 
-| File                                | Purpose                       |
-| ----------------------------------- | ----------------------------- |
-| `src/index.ts`                      | Server initialization         |
-| `src/handlers/message-handlers.ts`  | WebSocket message routing     |
-| `src/handlers/claude-processor.ts`  | SDK message processing        |
-| `src/session/message-queue.ts`      | Async message queue           |
-| `src/services/sync.ts`              | R2 session persistence        |
-| `src/shutdown/graceful-shutdown.ts` | Graceful shutdown             |
-| `Dockerfile`                        | Container build configuration |
+| File                                  | Purpose                        |
+| ------------------------------------- | ------------------------------ |
+| `src/index.ts`                        | Server initialization          |
+| `src/handlers/message-handlers.ts`    | WebSocket message routing      |
+| `src/handlers/claude-processor.ts`    | SDK message processing         |
+| `src/handlers/permission-handler.ts`  | Permission/question routing    |
+| `src/session/message-queue.ts`        | Async message queue            |
+| `src/session/permission-registry.ts`  | Permission request management  |
+| `src/session/question-registry.ts`    | Question request management    |
+| `src/tools/update-task.ts`            | MCP task update tool           |
+| `src/services/sync.ts`               | R2 session persistence         |
+| `src/shutdown/graceful-shutdown.ts`   | Graceful shutdown              |
+| `Dockerfile`                          | Container build configuration  |
 
 ## Development
 

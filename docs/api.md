@@ -16,6 +16,8 @@ apps/api/src/
 ├── auth/                   # Authentication module
 ├── chat/                   # Chat session module
 ├── organization/           # Organization/company module
+├── projects/               # Project management module
+├── tasks/                  # Task management module
 └── internal/               # Service-to-service endpoints
 ```
 
@@ -48,12 +50,13 @@ Each feature module follows a consistent pattern:
 
 ### Chat (`/chat`)
 
-| Method | Path                 | Description               | Auth |
-| ------ | -------------------- | ------------------------- | ---- |
-| POST   | `/chat/sessions`     | Create chat session       | Yes  |
-| GET    | `/chat/sessions`     | List user's sessions      | Yes  |
-| GET    | `/chat/sessions/:id` | Get session with messages | Yes  |
-| DELETE | `/chat/sessions/:id` | Delete session            | Yes  |
+| Method | Path                          | Description                    | Auth |
+| ------ | ----------------------------- | ------------------------------ | ---- |
+| POST   | `/chat/sessions`              | Create chat session            | Yes  |
+| GET    | `/chat/sessions`              | List user's sessions           | Yes  |
+| GET    | `/chat/sessions/task/:taskId` | Get or create session for task | Yes  |
+| GET    | `/chat/sessions/:id`          | Get session with messages      | Yes  |
+| DELETE | `/chat/sessions/:id`          | Delete session                 | Yes  |
 
 ### Organization (`/organization`)
 
@@ -65,11 +68,34 @@ Each feature module follows a consistent pattern:
 | PATCH  | `/organization/members/:id` | Update member role       | Admin |
 | DELETE | `/organization/members/:id` | Remove member            | Admin |
 
+### Projects (`/projects`)
+
+| Method | Path                  | Description         | Auth |
+| ------ | --------------------- | ------------------- | ---- |
+| GET    | `/projects`           | List all projects   | Yes  |
+| POST   | `/projects`           | Create project      | Yes  |
+| GET    | `/projects/:id`       | Get project details | Yes  |
+| GET    | `/projects/:id/members` | Get project members | Yes  |
+
+### Tasks (`/projects/:projectId/tasks`)
+
+| Method | Path                                                 | Description     | Auth |
+| ------ | ---------------------------------------------------- | --------------- | ---- |
+| GET    | `/projects/:projectId/tasks`                         | List tasks      | Yes  |
+| POST   | `/projects/:projectId/tasks`                         | Create task     | Yes  |
+| GET    | `/projects/:projectId/tasks/:taskId`                 | Get task        | Yes  |
+| PATCH  | `/projects/:projectId/tasks/:taskId`                 | Update task     | Yes  |
+| DELETE | `/projects/:projectId/tasks/:taskId`                 | Delete task     | Yes  |
+| GET    | `/projects/:projectId/tasks/:taskId/assignees`       | Get assignees   | Yes  |
+| POST   | `/projects/:projectId/tasks/:taskId/assignees`       | Add assignee    | Yes  |
+| DELETE | `/projects/:projectId/tasks/:taskId/assignees/:userId` | Remove assignee | Yes  |
+
 ### Internal (`/internal`)
 
-| Method | Path                                     | Description   | Auth          |
-| ------ | ---------------------------------------- | ------------- | ------------- |
-| POST   | `/internal/sessions/:sessionId/messages` | Save messages | Service Token |
+| Method | Path                                     | Description        | Auth          |
+| ------ | ---------------------------------------- | ------------------ | ------------- |
+| POST   | `/internal/sessions/:sessionId/messages` | Save messages      | Service Token |
+| PATCH  | `/internal/tasks/:taskId`                | Update task fields | Service Token |
 
 ### Health
 
@@ -107,15 +133,19 @@ Validates `X-Service-Token` header against `INTERNAL_API_TOKEN`.
 
 Base error class with HTTP status codes and error codes:
 
-| Error                     | Status | Module       |
-| ------------------------- | ------ | ------------ |
-| `InvalidCredentialsError` | 401    | auth         |
-| `EmailAlreadyExistsError` | 409    | auth         |
-| `InvalidSessionError`     | 401    | auth         |
-| `SessionNotFoundError`    | 404    | chat         |
-| `UnauthorizedAccessError` | 403    | chat         |
-| `ForbiddenError`          | 403    | organization |
-| `MemberNotFoundError`     | 404    | organization |
+| Error                      | Status | Module       |
+| -------------------------- | ------ | ------------ |
+| `InvalidCredentialsError`  | 401    | auth         |
+| `EmailAlreadyExistsError`  | 409    | auth         |
+| `InvalidSessionError`      | 401    | auth         |
+| `SessionNotFoundError`     | 404    | chat         |
+| `UnauthorizedAccessError`  | 403    | chat         |
+| `ForbiddenError`           | 403    | organization |
+| `MemberNotFoundError`      | 404    | organization |
+| `ProjectNotFoundError`     | 404    | projects     |
+| `NoCompanyMembershipError` | 403    | projects     |
+| `TaskNotFoundError`        | 404    | tasks        |
+| `TaskAccessDeniedError`    | 403    | tasks        |
 
 Error response format:
 
@@ -138,8 +168,14 @@ Tables accessed:
 - `users` - User accounts
 - `companies` - Organizations
 - `companyMembers` - User-company relationships
+- `projects` - Projects within companies
+- `projectMembers` - User-project relationships
+- `tasks` - Tasks within projects
+- `taskAssignees` - User-task assignments
 - `sessions` - Chat sessions
 - `messages` - Chat messages
+- `sessionProjects` - Session-to-project links
+- `sessionTasks` - Session-to-task links
 
 ## Environment Variables
 

@@ -29,7 +29,8 @@ pnpm dlx shadcn@latest add <component>  # Add shadcn/ui component
 
 - `apps/web` - Next.js frontend (uses @repo/ui, @repo/db)
 - `apps/api` - Hono.js API server (uses @repo/db)
-- `apps/sandbox` - Cloudflare Workers container running Claude Agent SDK WebSocket server
+- `apps/sandbox` - Cloudflare Workers with Durable Objects for WebSocket management and container orchestration
+- `apps/container` - Claude Agent SDK WebSocket server running inside sandbox containers
 - `packages/ui` - Shared React components
 - `packages/db` - Drizzle ORM schema and client
 - `packages/tailwind-config` - Shared Tailwind config
