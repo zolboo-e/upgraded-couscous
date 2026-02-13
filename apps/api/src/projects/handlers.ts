@@ -1,7 +1,11 @@
 import { sValidator } from "@hono/standard-validator";
 import { factory } from "../shared/factory.js";
 import type { ProjectService } from "./services/project.service.js";
-import { createProjectSchema, projectIdParamSchema } from "./types/request.types.js";
+import {
+  createProjectSchema,
+  projectIdParamSchema,
+  updateProjectSchema,
+} from "./types/request.types.js";
 
 export function createProjectHandlers(projectService: ProjectService) {
   return {
@@ -37,6 +41,18 @@ export function createProjectHandlers(projectService: ProjectService) {
         const { id: projectId } = c.req.valid("param");
         const result = await projectService.getProjectMembers(userId, projectId);
         return c.json({ data: { members: result } });
+      },
+    ),
+
+    updateProject: factory.createHandlers(
+      sValidator("param", projectIdParamSchema),
+      sValidator("json", updateProjectSchema),
+      async (c) => {
+        const userId = c.get("userId");
+        const { id: projectId } = c.req.valid("param");
+        const input = c.req.valid("json");
+        const result = await projectService.updateProject(userId, projectId, input);
+        return c.json({ data: result });
       },
     ),
   };

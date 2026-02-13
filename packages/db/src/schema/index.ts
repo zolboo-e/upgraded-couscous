@@ -7,5 +7,6 @@ export * from "./session-projects";
 export * from "./session-tasks";
 export * from "./sessions";
 export * from "./task-assignees";
+export * from "./task-runs";
 export * from "./tasks";
 export * from "./users";

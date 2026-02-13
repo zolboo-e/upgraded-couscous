@@ -5,6 +5,7 @@ import {
   filesRoute,
   healthRoute,
   logsRoute,
+  taskRunRoute,
   websocketRoute,
   websocketV2Route,
 } from "./routes/index.js";
@@ -36,6 +37,10 @@ function createApp(): Hono<AppEnv> {
 
   // WebSocket v2 route (uses JWT auth, not bearer token)
   app.route("/ws/v2", websocketV2Route);
+
+  // Task run route (uses bearer token auth)
+  app.use("/task-runs", bearerAuth);
+  app.route("/task-runs", taskRunRoute);
 
   return app;
 }

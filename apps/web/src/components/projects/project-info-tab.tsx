@@ -3,6 +3,7 @@ import { Calendar, FileText, Users } from "lucide-react";
 import Markdown from "react-markdown";
 import type { ProjectMember, ProjectSummary } from "@/lib/actions/projects";
 import { ProjectMembersSection } from "./project-members-section";
+import { ProjectRepoSettings } from "./project-repo-settings";
 
 interface ProjectInfoTabProps {
   project: ProjectSummary;
@@ -70,6 +71,10 @@ export function ProjectInfoTab({ project, members }: ProjectInfoTabProps): React
           </CardContent>
         </Card>
       )}
+
+      <div className="md:col-span-2">
+        <ProjectRepoSettings projectId={project.id} meta={project.meta} />
+      </div>
     </div>
   );
 }

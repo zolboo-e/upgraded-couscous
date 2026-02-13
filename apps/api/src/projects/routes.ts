@@ -9,5 +9,6 @@ export function createProjectRoutes(handlers: ProjectHandlers, authMiddleware: M
     .get("/", ...handlers.getProjects)
     .post("/", ...handlers.createProject)
     .get("/:id", ...handlers.getProjectById)
+    .patch("/:id", ...handlers.updateProject)
     .get("/:id/members", ...handlers.getProjectMembers);
 }

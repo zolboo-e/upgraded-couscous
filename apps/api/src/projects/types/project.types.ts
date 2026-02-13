@@ -1,8 +1,15 @@
+export interface ProjectMetaResponse {
+  repoUrl?: string;
+  defaultBranch?: string;
+  hasGithubToken?: boolean;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   description: string | null;
   details: string | null;
+  meta?: ProjectMetaResponse;
   memberCount: number;
   createdAt: Date;
   updatedAt: Date;

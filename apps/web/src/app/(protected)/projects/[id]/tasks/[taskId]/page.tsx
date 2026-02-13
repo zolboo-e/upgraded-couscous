@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { TaskChat } from "@/components/tasks/task-chat";
 import { TaskDetailInfo } from "@/components/tasks/task-detail-info";
 import { TaskSplitLayout } from "@/components/tasks/task-split-layout";
-import { getProjectMembers } from "@/lib/actions/projects";
+import { getProjectById, getProjectMembers } from "@/lib/actions/projects";
 import { getTaskAssignees } from "@/lib/actions/task-assignees";
 import { getTask } from "@/lib/actions/tasks";
 import { getTaskSession } from "@/lib/api/chat";
@@ -16,10 +16,11 @@ export default async function TaskDetailPage({
 }: TaskDetailPageProps): Promise<React.ReactElement> {
   const { id, taskId } = await params;
 
-  const [task, assigneesResult, members] = await Promise.all([
+  const [task, assigneesResult, members, project] = await Promise.all([
     getTask(id, taskId),
     getTaskAssignees(id, taskId),
     getProjectMembers(id),
+    getProjectById(id),
   ]);
 
   if (!task) {
@@ -42,12 +43,15 @@ export default async function TaskDetailPage({
     </div>
   );
 
+  const hasRepoConfigured = Boolean(project?.meta?.repoUrl && project?.meta?.hasGithubToken);
+
   const infoPanel = (
     <TaskDetailInfo
       task={task}
       projectId={id}
       assignees={assigneesResult?.assignees ?? []}
       projectMembers={members?.members ?? []}
+      hasRepoConfigured={hasRepoConfigured}
     />
   );
 

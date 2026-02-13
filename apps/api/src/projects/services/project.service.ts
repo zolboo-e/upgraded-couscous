@@ -1,3 +1,4 @@
+import type { ProjectMeta } from "@repo/db";
 import type { ChatRepository } from "../../chat/repositories/chat.repository.js";
 import {
   ForbiddenError,
@@ -120,5 +121,53 @@ export class ProjectService {
     }
 
     return this.repository.findMembersByProjectId(projectId);
+  }
+
+  async updateProject(
+    userId: string,
+    projectId: string,
+    data: {
+      name?: string;
+      description?: string | null;
+      details?: string | null;
+      meta?: { repoUrl?: string; defaultBranch?: string; githubToken?: string };
+    },
+  ): Promise<ProjectSummary> {
+    const membership = await this.repository.getUserCompanyMembership(userId);
+
+    if (!membership) {
+      throw new NoCompanyMembershipError();
+    }
+
+    if (membership.role !== "admin") {
+      throw new ForbiddenError("Only admins can update projects");
+    }
+
+    const existing = await this.repository.findByIdRaw(projectId);
+    if (!existing) {
+      throw new ProjectNotFoundError();
+    }
+
+    if (existing.companyId !== membership.companyId) {
+      throw new ForbiddenError("You do not have access to this project");
+    }
+
+    const mergedMeta: ProjectMeta | undefined = data.meta
+      ? { ...((existing.meta as ProjectMeta) ?? {}), ...data.meta }
+      : undefined;
+
+    await this.repository.update(projectId, {
+      name: data.name,
+      description: data.description,
+      details: data.details,
+      meta: mergedMeta,
+    });
+
+    const updated = await this.repository.findById(projectId);
+    if (!updated) {
+      throw new ProjectNotFoundError();
+    }
+
+    return updated;
   }
 }

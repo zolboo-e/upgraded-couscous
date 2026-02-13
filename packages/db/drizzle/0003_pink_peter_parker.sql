@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "meta" jsonb DEFAULT '{}'::jsonb NOT NULL;

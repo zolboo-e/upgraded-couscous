@@ -14,5 +14,8 @@ export function createInternalRoutes(handlers: InternalHandlers): Hono {
   // PATCH /internal/tasks/:taskId - Update a task (from agent)
   internal.patch("/tasks/:taskId", handlers.updateTask);
 
+  // PATCH /internal/task-runs/:runId - Update a task run status (from container)
+  internal.patch("/task-runs/:runId", handlers.updateTaskRun);
+
   return internal;
 }

@@ -4,11 +4,18 @@ import { parseResponse } from "hono/client";
 import { revalidatePath } from "next/cache";
 import { api } from "../api/client";
 
+export interface ProjectMetaResponse {
+  repoUrl?: string;
+  defaultBranch?: string;
+  hasGithubToken?: boolean;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   description: string | null;
   details: string | null;
+  meta?: ProjectMetaResponse;
   memberCount: number;
   createdAt: string;
   updatedAt: string;
@@ -72,6 +79,33 @@ export interface ProjectMember {
 
 export interface ProjectMembersResult {
   members: ProjectMember[];
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string | null;
+  details?: string | null;
+  meta?: {
+    repoUrl?: string;
+    defaultBranch?: string;
+    githubToken?: string;
+  };
+}
+
+export async function updateProject(
+  projectId: string,
+  input: UpdateProjectInput,
+): Promise<ActionResult> {
+  try {
+    await parseResponse(api.projects[":id"].$patch({ param: { id: projectId }, json: input }));
+    revalidatePath(`/projects/${projectId}`);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update project",
+    };
+  }
 }
 
 export async function getProjectMembers(projectId: string): Promise<ProjectMembersResult | null> {

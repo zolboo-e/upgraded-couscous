@@ -29,12 +29,15 @@ import {
 import { updateTaskSchema } from "@/lib/validations/task";
 import { DeleteTaskDialog } from "./delete-task-dialog";
 import { TaskAssigneesSection } from "./task-assignees-section";
+import { TaskRunButton } from "./task-run-button";
+import { TaskRunsPanel } from "./task-runs-panel";
 
 interface TaskDetailInfoProps {
   task: TaskSummary;
   projectId: string;
   assignees: TaskAssignee[];
   projectMembers: ProjectMember[];
+  hasRepoConfigured: boolean;
 }
 
 export function TaskDetailInfo({
@@ -42,9 +45,11 @@ export function TaskDetailInfo({
   projectId,
   assignees,
   projectMembers,
+  hasRepoConfigured,
 }: TaskDetailInfoProps): React.ReactElement {
   const [serverError, setServerError] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
@@ -239,6 +244,22 @@ export function TaskDetailInfo({
         assignees={assignees}
         projectMembers={projectMembers}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Run Task</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TaskRunButton
+            projectId={projectId}
+            taskId={task.id}
+            hasRepoConfigured={hasRepoConfigured}
+            onRunTriggered={(runId) => setActiveRunId(runId)}
+          />
+        </CardContent>
+      </Card>
+
+      <TaskRunsPanel projectId={projectId} taskId={task.id} activeRunId={activeRunId} />
 
       <DeleteTaskDialog
         projectId={projectId}

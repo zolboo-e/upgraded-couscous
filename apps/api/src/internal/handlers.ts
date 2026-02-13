@@ -1,15 +1,19 @@
 import type { Context } from "hono";
 import type { ChatService } from "../chat/services/chat.service.js";
+import type { TaskRunRepository } from "../task-runs/repositories/task-run.repository.js";
+import type { TaskRunStatus } from "../task-runs/types/task-run.types.js";
 import type { TaskRepository } from "../tasks/repositories/task.repository.js";
 
 export interface InternalHandlers {
   saveMessage: (c: Context) => Promise<Response>;
   updateTask: (c: Context) => Promise<Response>;
+  updateTaskRun: (c: Context) => Promise<Response>;
 }
 
 export function createInternalHandlers(
   chatService: ChatService,
   taskRepository: TaskRepository,
+  taskRunRepository: TaskRunRepository,
 ): InternalHandlers {
   return {
     async saveMessage(c: Context): Promise<Response> {
@@ -84,6 +88,44 @@ export function createInternalHandlers(
       });
 
       return c.json({ task: updated });
+    },
+
+    async updateTaskRun(c: Context): Promise<Response> {
+      const runId = c.req.param("runId");
+      const body = await c.req.json<{
+        status?: TaskRunStatus;
+        gitDiff?: string;
+        commitSha?: string;
+        baseCommitSha?: string;
+        branchName?: string;
+        errorMessage?: string;
+      }>();
+
+      const validStatuses: TaskRunStatus[] = [
+        "pending",
+        "cloning",
+        "running",
+        "completed",
+        "failed",
+      ];
+      if (body.status !== undefined && !validStatuses.includes(body.status)) {
+        return c.json({ error: "Invalid status" }, 400);
+      }
+
+      const updated = await taskRunRepository.updateStatus(runId, {
+        status: body.status,
+        gitDiff: body.gitDiff,
+        commitSha: body.commitSha,
+        baseCommitSha: body.baseCommitSha,
+        branchName: body.branchName,
+        errorMessage: body.errorMessage,
+      });
+
+      if (!updated) {
+        return c.json({ error: "Task run not found" }, 404);
+      }
+
+      return c.json({ taskRun: updated });
     },
   };
 }

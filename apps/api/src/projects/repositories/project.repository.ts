@@ -134,6 +134,7 @@ export class ProjectRepository {
         name: projects.name,
         description: projects.description,
         details: projects.details,
+        meta: projects.meta,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
         memberCount: sql<number>`COALESCE(${memberCountSubquery.count}, 0)`.as("memberCount"),
@@ -147,11 +148,24 @@ export class ProjectRepository {
       return null;
     }
 
+    const meta = result.meta as {
+      repoUrl?: string;
+      defaultBranch?: string;
+      githubToken?: string;
+    } | null;
+
     return {
       id: result.id,
       name: result.name,
       description: result.description,
       details: result.details,
+      meta: meta
+        ? {
+            repoUrl: meta.repoUrl,
+            defaultBranch: meta.defaultBranch,
+            hasGithubToken: !!meta.githubToken,
+          }
+        : undefined,
       memberCount: Number(result.memberCount),
       createdAt: result.createdAt,
       updatedAt: result.updatedAt,
@@ -177,6 +191,49 @@ export class ProjectRepository {
       .orderBy(projectMembers.createdAt);
 
     return results;
+  }
+
+  async update(
+    projectId: string,
+    data: {
+      name?: string;
+      description?: string | null;
+      details?: string | null;
+      meta?: Record<string, unknown>;
+    },
+  ): Promise<Project | null> {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+    if (data.description !== undefined) {
+      updateData.description = data.description;
+    }
+    if (data.details !== undefined) {
+      updateData.details = data.details;
+    }
+    if (data.meta !== undefined) {
+      updateData.meta = data.meta;
+    }
+
+    const [result] = await this.db
+      .update(projects)
+      .set(updateData)
+      .where(eq(projects.id, projectId))
+      .returning();
+
+    return result ?? null;
+  }
+
+  async findByIdRaw(projectId: string): Promise<Project | null> {
+    const [result] = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    return result ?? null;
   }
 
   async getProjectCompanyId(projectId: string): Promise<string | null> {

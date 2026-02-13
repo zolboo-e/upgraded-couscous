@@ -15,6 +15,7 @@
 import { Sandbox } from "@cloudflare/sandbox";
 import app from "./app.js";
 import { SessionDO } from "./durable-objects/session-do.js";
+import { TaskRunDO } from "./durable-objects/task-run-do.js";
 
 export default app;
-export { Sandbox, SessionDO };
+export { Sandbox, SessionDO, TaskRunDO };
