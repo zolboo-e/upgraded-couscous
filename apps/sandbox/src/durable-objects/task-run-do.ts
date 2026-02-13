@@ -54,8 +54,9 @@ function buildTaskPrompt(req: TaskRunRequest): string {
   return parts.join("\n");
 }
 
-function getAuthenticatedUrl(repoUrl: string, token: string): string {
-  return repoUrl.replace("https://", `https://x-access-token:${token}@`);
+function getAuthenticatedUrl(repoUrl: string, _token: string): string {
+  return repoUrl;
+  // return repoUrl.replace("https://", `https://x-access-token:${token}@`);
 }
 
 function escapeShellArg(arg: string): string {
@@ -187,24 +188,43 @@ export class TaskRunDO extends DurableObject<Env> {
       await report({ status: "running", baseCommitSha, branchName });
 
       const taskPrompt = buildTaskPrompt(req);
+      const systemPrompt = escapeShellArg(
+        "You are an automatic feature-implementer/bug-fixer. " +
+          "You apply all necessary changes to achieve the user request. " +
+          "You must ensure you DO NOT commit the changes, " +
+          "so the pipeline can read the local `git diff` and apply the change upstream.",
+      );
       const claudeCmd = [
         `cd "${repoDir}"`,
         `&& claude -p ${escapeShellArg(taskPrompt)}`,
+        `--append-system-prompt ${systemPrompt}`,
         "--permission-mode acceptEdits",
         "--output-format json",
         "--max-turns 50",
       ].join(" ");
 
       const claudeResult = await sandbox.exec(claudeCmd, { timeout: 600_000 });
-      if (!claudeResult.success) {
-        // Claude may exit non-zero but still produce changes; log and continue
-        console.warn(`[TaskRunDO] Run ${runId}: Claude CLI exited ${claudeResult.exitCode}`);
+      console.log(`[TaskRunDO] Run ${runId}: Claude CLI exited ${claudeResult.exitCode}`);
+      if (claudeResult.stderr) {
+        console.warn(`[TaskRunDO] Run ${runId}: stderr: ${claudeResult.stderr.slice(0, 500)}`);
       }
 
-      // Step 6: Check for changes
-      const statusResult = await sandbox.exec(`git -C "${repoDir}" status --porcelain`);
+      // Debug: check git state after Claude runs
+      const debugLog = await sandbox.exec(
+        `git -C "${repoDir}" log --oneline -5` +
+          ` && echo "---STATUS---"` +
+          ` && git -C "${repoDir}" status --short`,
+      );
+      console.log(`[TaskRunDO] Run ${runId}: Git state after Claude:\n${debugLog.stdout}`);
 
-      if (!statusResult.stdout.trim()) {
+      // Step 6: Stage all changes and capture diff against base
+      // Using --staged diff against baseCommitSha catches both uncommitted changes
+      // AND changes Claude may have committed (despite being told not to)
+      await sandbox.exec(`git -C "${repoDir}" add -A`);
+      const diffResult = await sandbox.exec(`git -C "${repoDir}" diff --staged ${baseCommitSha}`);
+      const gitDiff = diffResult.stdout;
+
+      if (!gitDiff.trim()) {
         console.log(`[TaskRunDO] Run ${runId}: No changes made by Claude`);
         await report({
           status: "completed",
@@ -215,33 +235,29 @@ export class TaskRunDO extends DurableObject<Env> {
         return;
       }
 
-      // Step 7: Commit and push
+      // Step 7: Commit staged changes (may be no-op if Claude already committed everything)
       console.log(`[TaskRunDO] Run ${runId}: Committing and pushing changes...`);
-      await sandbox.exec(`git -C "${repoDir}" add -A`);
-
       const commitMsg = escapeShellArg(`task: ${req.taskTitle}`);
       const commitResult = await sandbox.exec(`git -C "${repoDir}" commit -m ${commitMsg}`);
       if (!commitResult.success) {
-        throw new Error(`git commit failed: ${commitResult.stderr}`);
+        console.warn(`[TaskRunDO] Run ${runId}: Commit skipped (already committed by Claude)`);
       }
 
-      const pushResult = await sandbox.exec(`git -C "${repoDir}" push -u origin "${branchName}"`, {
-        timeout: 60_000,
-      });
-      if (!pushResult.success) {
-        throw new Error(`git push failed: ${pushResult.stderr}`);
-      }
+      // TODO: Re-enable push when git authentication is configured
+      // const pushResult = await sandbox.exec(`git -C "${repoDir}" push -u origin "${branchName}"`, {
+      //   timeout: 60_000,
+      // });
+      // if (!pushResult.success) {
+      //   throw new Error(`git push failed: ${pushResult.stderr}`);
+      // }
 
-      // Step 8: Capture diff and commit SHA
+      // Step 8: Get final commit SHA
       const commitShaResult = await sandbox.exec(`git -C "${repoDir}" rev-parse HEAD`);
-      const diffResult = await sandbox.exec(
-        `git -C "${repoDir}" diff "origin/${req.defaultBranch}...HEAD"`,
-      );
 
       console.log(`[TaskRunDO] Run ${runId}: Completed successfully`);
       await report({
         status: "completed",
-        gitDiff: diffResult.stdout,
+        gitDiff,
         commitSha: commitShaResult.stdout.trim(),
         branchName,
       });
