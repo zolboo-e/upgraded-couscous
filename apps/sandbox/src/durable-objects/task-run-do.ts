@@ -116,7 +116,7 @@ export class TaskRunDO extends DurableObject<Env> {
 
     try {
       this.sandbox = getSandbox(this.env.Sandbox, runId, {
-        sleepAfter: "30m",
+        sleepAfter: "5m",
       });
 
       await this.sandbox.setEnvVars({
@@ -265,6 +265,18 @@ export class TaskRunDO extends DurableObject<Env> {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[TaskRunDO] Run ${runId}: Failed: ${errorMessage}`);
       await report({ status: "failed", errorMessage, branchName });
+    } finally {
+      try {
+        console.log(`[TaskRunDO] Run ${runId}: Destroying sandbox...`);
+        await sandbox.destroy();
+        console.log(`[TaskRunDO] Run ${runId}: Sandbox destroyed`);
+      } catch (destroyError) {
+        console.error(
+          `[TaskRunDO] Run ${runId}: Failed to destroy sandbox:`,
+          destroyError instanceof Error ? destroyError.message : String(destroyError),
+        );
+      }
+      this.sandbox = null;
     }
   }
 }
