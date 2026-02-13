@@ -23,7 +23,7 @@ export function createSandboxClient(
         throw new TaskRunTriggerError("Sandbox is not configured");
       }
 
-      const baseUrl = sandboxUrl.replace(/^ws/, "http");
+      const baseUrl = new URL(sandboxUrl.replace(/^ws/, "http")).origin;
 
       const response = await fetch(`${baseUrl}/task-runs`, {
         method: "POST",
