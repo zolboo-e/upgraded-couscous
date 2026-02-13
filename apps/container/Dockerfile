@@ -1,5 +1,5 @@
 # ==================== BASE ====================
-FROM docker.io/cloudflare/sandbox:0.7.1 AS base
+FROM docker.io/cloudflare/sandbox:0.7.2 AS base
 
 RUN apt-get update && apt-get install -y rsync && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://claude.ai/install.sh | bash

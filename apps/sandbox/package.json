@@ -10,15 +10,15 @@
     "lint": "biome check ."
   },
   "dependencies": {
-    "@cloudflare/sandbox": "^0.7.1",
+    "@cloudflare/sandbox": "^0.7.2",
     "hono": "^4.11.9",
     "jose": "^6.1.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260210.0",
+    "@cloudflare/workers-types": "^4.20260213.0",
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "^25.2.2",
+    "@types/node": "^25.2.3",
     "typescript": "^5.9.3",
-    "wrangler": "^4.63.0"
+    "wrangler": "^4.65.0"
   }
 }
