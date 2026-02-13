@@ -1,4 +1,4 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { RawData, WebSocket } from "ws";
 import {
   checkSessionExists,
@@ -68,10 +68,6 @@ export async function handleStart(
     projectId: message.projectId ?? null,
   });
 
-  // Create infinite prompt generator for this WebSocket
-  // This generator stays alive until the WebSocket closes
-  const promptGenerator = sessionQueue.consume(ws);
-
   // Create MCP server for task tools if this is a task session
   const apiBaseUrl = process.env.API_BASE_URL;
   const apiToken = process.env.INTERNAL_API_TOKEN;
@@ -89,44 +85,49 @@ export async function handleStart(
       }
     : undefined;
 
-  // Start Claude query with session-id for persistence
-  // - tools: restricts available built-in tools
-  // - canUseTool: routes permission requests to the frontend via WebSocket
-  // - extraArgs: { "session-id": ... } sets the session ID for new sessions
-  // - resume: sessionId restores existing session state from disk
   const canUseTool = createCanUseTool(ws, deps.permissionRegistry, deps.questionRegistry, logger);
 
-  const claudeQuery = query({
-    prompt: promptGenerator,
-    options: {
-      model,
-      systemPrompt: message.systemPrompt,
-      mcpServers,
-      tools: [
-        "WebFetch",
-        "WebSearch",
-        "AskUserQuestion",
-        ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
-      ],
-      allowedTools: [
-        // https://platform.claude.com/docs/en/agent-sdk/mcp
-        ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
-      ],
-      canUseTool,
-      extraArgs:
-        !sessionExists && message.sessionId ? { "session-id": message.sessionId } : undefined,
-      resume: sessionExists ? message.sessionId : undefined,
-    },
-  });
+  const tools = [
+    "WebFetch",
+    "WebSearch",
+    "AskUserQuestion",
+    ...(hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : []),
+  ];
+  const allowedTools = hasTaskTools ? [UPDATE_TASK_TOOL_NAME] : [];
 
-  // Process messages in background with error handling
-  // This loop runs until the WebSocket closes or an error occurs
-  processClaudeMessages(ws, claudeQuery, message.sessionId ?? null, logger, syncSession).catch(
-    (error) => {
+  // Creates a Claude query, optionally resuming an existing session
+  const createClaudeQuery = (useResume: boolean): AsyncIterable<SDKMessage> =>
+    query({
+      prompt: sessionQueue.consume(ws),
+      options: {
+        model,
+        systemPrompt: message.systemPrompt,
+        mcpServers,
+        tools,
+        allowedTools,
+        canUseTool,
+        extraArgs:
+          !useResume && message.sessionId ? { "session-id": message.sessionId } : undefined,
+        resume: useResume ? message.sessionId : undefined,
+      },
+    });
+
+  const claudeQuery = createClaudeQuery(sessionExists);
+  const sid = message.sessionId ?? null;
+
+  // Process messages in background with retry on resume failure.
+  // If resume fails ("No conversation found"), retry as a fresh session.
+  processClaudeMessages(ws, claudeQuery, sid, logger, syncSession)
+    .then(async (result) => {
+      if (!result.retryWithoutResume || !message.sessionId) return;
+      logger.info("Retrying query without resume", { sessionId: message.sessionId });
+      const retryQuery = createClaudeQuery(false);
+      await processClaudeMessages(ws, retryQuery, sid, logger, syncSession);
+    })
+    .catch((error) => {
       logger.error("Claude processing error", error instanceof Error ? error.stack : error);
       sendMessage(ws, { type: "error", message: "Claude processing failed" }, logger);
-    },
-  );
+    });
 
   // Send initial message if provided
   if (message.content) {

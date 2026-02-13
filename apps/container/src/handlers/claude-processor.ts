@@ -3,6 +3,21 @@ import { WebSocket } from "ws";
 import type { Logger } from "../types/index.js";
 import { sendMessage } from "../websocket/send.js";
 
+const NO_CONVERSATION_ERROR = "No conversation found with session ID";
+
+export interface ProcessResult {
+  retryWithoutResume: boolean;
+}
+
+function isNoConversationError(message: SDKMessage): boolean {
+  if (message.type !== "result") return false;
+  const result = message as { is_error?: boolean; errors?: string[] };
+  return (
+    result.is_error === true &&
+    (result.errors?.some((e) => e.includes(NO_CONVERSATION_ERROR)) ?? false)
+  );
+}
+
 /**
  * Process messages from Claude Agent SDK
  * Forwards raw SDK messages for real-time display
@@ -13,7 +28,7 @@ export async function processClaudeMessages(
   sessionId: string | null,
   logger: Logger,
   syncSession: (sessionId: string | null) => Promise<void>,
-): Promise<void> {
+): Promise<ProcessResult> {
   try {
     logger.info("Starting Claude query processing");
 
@@ -22,6 +37,12 @@ export async function processClaudeMessages(
       if (ws.readyState !== WebSocket.OPEN) {
         logger.info("WebSocket closed, stopping message processing");
         break;
+      }
+
+      // Detect "No conversation found" error — signal retry instead of forwarding
+      if (isNoConversationError(message)) {
+        logger.info("Session resume failed: no conversation found", { sessionId });
+        return { retryWithoutResume: true };
       }
 
       logger.debug("Received SDK message", {
@@ -54,9 +75,17 @@ export async function processClaudeMessages(
     }
 
     logger.info("Claude query completed");
+    return { retryWithoutResume: false };
   } catch (error) {
     logger.error("Claude query error", error instanceof Error ? error.stack : error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes(NO_CONVERSATION_ERROR)) {
+      logger.info("Session resume failed (exception): no conversation found", { sessionId });
+      return { retryWithoutResume: true };
+    }
+
     sendMessage(ws, { type: "error", message: errorMessage }, logger);
+    return { retryWithoutResume: false };
   }
 }
