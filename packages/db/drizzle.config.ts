@@ -19,6 +19,7 @@ export default defineConfig({
     "./src/schema/task-assignees.ts",
     "./src/schema/session-tasks.ts",
     "./src/schema/session-projects.ts",
+    "./src/schema/task-runs.ts",
   ],
   out: "./drizzle",
   dbCredentials: {
