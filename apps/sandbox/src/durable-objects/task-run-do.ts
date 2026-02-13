@@ -116,7 +116,7 @@ export class TaskRunDO extends DurableObject<Env> {
 
     try {
       this.sandbox = getSandbox(this.env.Sandbox, runId, {
-        sleepAfter: "5m",
+        sleepAfter: "30m",
       });
 
       await this.sandbox.setEnvVars({
