@@ -943,18 +943,22 @@ Browser          SessionDO        Sandbox DO       Container
   "durable_objects": {
     "bindings": [
       {
+        "name": "Sandbox", // Cloudflare's Container DO
+        "class_name": "Sandbox",
+      },
+      {
         "name": "SessionDO", // Your custom DO
         "class_name": "SessionDO",
       },
       {
-        "name": "Sandbox", // Cloudflare's Container DO
-        "class_name": "Sandbox", // From @cloudflare/containers
+        "name": "TaskRunDO", // Autonomous task execution DO
+        "class_name": "TaskRunDO",
       },
     ],
   },
   "r2_buckets": [
     {
-      "binding": "R2",
+      "binding": "claude_sessions",
       "bucket_name": "claude-sessions",
     },
   ],

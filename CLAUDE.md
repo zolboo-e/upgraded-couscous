@@ -9,7 +9,7 @@ Full-stack TypeScript monorepo using Turbo.
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
 - **Backend**: Hono.js with Node.js
 - **Database**: Drizzle ORM + Neon PostgreSQL
-- **Tools**: pnpm 10.28.2, Turbo 2.7, Biome 2.3, TypeScript 5.9
+- **Tools**: pnpm 10.28.2, Turbo 2.8, Biome 2.3, TypeScript 5.9
 - **Sandbox**: Cloudflare (for Claude Code CLI)
 
 ## Commands
@@ -27,9 +27,9 @@ pnpm dlx shadcn@latest add <component>  # Add shadcn/ui component
 
 ## Structure
 
-- `apps/web` - Next.js frontend (uses @repo/ui, @repo/db)
+- `apps/web` - Next.js frontend (uses @repo/api, @repo/ui, @repo/db)
 - `apps/api` - Hono.js API server (uses @repo/db)
-- `apps/sandbox` - Cloudflare Workers with Durable Objects for WebSocket management and container orchestration
+- `apps/sandbox` - Cloudflare Workers with Durable Objects (SessionDO, TaskRunDO) for WebSocket management, container orchestration, and autonomous task execution
 - `apps/container` - Claude Agent SDK WebSocket server running inside sandbox containers
 - `packages/ui` - Shared React components
 - `packages/db` - Drizzle ORM schema and client
@@ -57,6 +57,8 @@ Set via `wrangler secret put` for Cloudflare Worker:
 - `CF_ACCOUNT_ID` - Cloudflare account ID (set in wrangler.jsonc vars, then override with secret)
 - `AWS_ACCESS_KEY_ID` - R2 access key
 - `AWS_SECRET_ACCESS_KEY` - R2 secret key
+- `JWT_SECRET` - Shared secret with API for WebSocket JWT auth
+- `ENVIRONMENT` - "production" or "development" (controls R2 sync)
 - `API_BASE_URL` - Base URL of the API server (e.g. `https://api.example.com`)
 - `INTERNAL_API_TOKEN` - Shared token for container-to-API auth (must match API's `INTERNAL_API_TOKEN`)
 

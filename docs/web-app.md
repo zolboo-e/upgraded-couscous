@@ -24,10 +24,12 @@ apps/web/src/
 │   ├── organization/       # Member management
 │   ├── projects/           # Project management UI
 │   ├── tasks/              # Task management UI
-│   └── layout/             # Header, navigation
+│   ├── layout/             # Header, navigation
+│   └── providers/          # QueryProvider, ThemeProvider
 ├── lib/
 │   ├── api/                # Hono RPC client
 │   ├── actions/            # Server actions
+│   ├── queries/            # React Query hooks
 │   └── validations/        # Zod schemas
 └── globals.css
 ```

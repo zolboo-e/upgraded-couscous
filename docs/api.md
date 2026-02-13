@@ -12,12 +12,14 @@ apps/api/src/
 │   └── env.ts              # Environment validation (Zod)
 ├── shared/
 │   ├── errors/             # Base error class
-│   └── middleware/         # Global error handler
+│   ├── middleware/         # Global error handler
+│   └── factory.ts          # Hono app factory
 ├── auth/                   # Authentication module
 ├── chat/                   # Chat session module
 ├── organization/           # Organization/company module
 ├── projects/               # Project management module
 ├── tasks/                  # Task management module
+├── task-runs/              # Task execution module
 └── internal/               # Service-to-service endpoints
 ```
 
@@ -90,12 +92,21 @@ Each feature module follows a consistent pattern:
 | POST   | `/projects/:projectId/tasks/:taskId/assignees`       | Add assignee    | Yes  |
 | DELETE | `/projects/:projectId/tasks/:taskId/assignees/:userId` | Remove assignee | Yes  |
 
+### Task Runs (`/projects/:projectId/tasks/:taskId/runs`)
+
+| Method | Path                                               | Description       | Auth |
+| ------ | -------------------------------------------------- | ----------------- | ---- |
+| POST   | `/projects/:projectId/tasks/:taskId/runs`          | Trigger task run  | Yes  |
+| GET    | `/projects/:projectId/tasks/:taskId/runs`          | List runs         | Yes  |
+| GET    | `/projects/:projectId/tasks/:taskId/runs/:runId`   | Get run details   | Yes  |
+
 ### Internal (`/internal`)
 
-| Method | Path                                     | Description        | Auth          |
-| ------ | ---------------------------------------- | ------------------ | ------------- |
-| POST   | `/internal/sessions/:sessionId/messages` | Save messages      | Service Token |
-| PATCH  | `/internal/tasks/:taskId`                | Update task fields | Service Token |
+| Method | Path                                     | Description            | Auth          |
+| ------ | ---------------------------------------- | ---------------------- | ------------- |
+| POST   | `/internal/sessions/:sessionId/messages` | Save messages          | Service Token |
+| PATCH  | `/internal/tasks/:taskId`                | Update task fields     | Service Token |
+| PATCH  | `/internal/task-runs/:runId`             | Update task run status | Service Token |
 
 ### Health
 
@@ -172,6 +183,7 @@ Tables accessed:
 - `projectMembers` - User-project relationships
 - `tasks` - Tasks within projects
 - `taskAssignees` - User-task assignments
+- `taskRuns` - Task execution records
 - `sessions` - Chat sessions
 - `messages` - Chat messages
 - `sessionProjects` - Session-to-project links

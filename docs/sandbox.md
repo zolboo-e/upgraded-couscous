@@ -12,6 +12,7 @@ apps/sandbox/src/
 │   └── env.ts                  # Configuration constants
 ├── durable-objects/
 │   ├── session-do.ts           # SessionDO (WebSocket + relay)
+│   ├── task-run-do.ts          # TaskRunDO (autonomous task execution)
 │   ├── sync-manager.ts         # R2 sync orchestration
 │   ├── sync-state-machine.ts   # Sync state transitions
 │   ├── failed-sync-recovery.ts # Sync failure persistence
@@ -22,12 +23,16 @@ apps/sandbox/src/
 │   └── cors.ts                 # CORS middleware
 ├── routes/
 │   ├── websocket-v2.ts         # WebSocket via SessionDO
+│   ├── websocket.ts            # Legacy v1 WebSocket route
+│   ├── task-run.ts             # Task run trigger via TaskRunDO
 │   ├── health.ts               # Health check
 │   ├── files.ts                # File listing
-│   └── logs.ts                 # Container logs
+│   ├── logs.ts                 # Container logs
+│   └── debug.ts                # Debug diagnostics
 ├── services/
 │   ├── jwt.ts                  # JWT validation
-│   └── r2-sync.ts              # R2 mount/restore/sync
+│   ├── r2-sync.ts              # R2 mount/restore/sync
+│   └── sandbox-manager.ts      # Sandbox context management
 ├── types/
 │   └── index.ts                # TypeScript definitions
 └── utils/
@@ -62,14 +67,33 @@ Container lifecycle management via `@cloudflare/sandbox` SDK.
 | `wsConnect()`    | WebSocket tunnel to container |
 | `destroy()`      | Kill container                |
 
+### TaskRunDO (Custom)
+
+Handles autonomous task execution by orchestrating git and Claude CLI operations via `sandbox.exec()`.
+
+| Step           | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| Clone repo     | `git clone` into container via `sandbox.exec()`          |
+| Branch         | Creates or checks out `task/{taskId}` branch             |
+| Claude CLI     | Runs `claude -p` with task prompt and `--max-turns 50`   |
+| Capture diff   | Stages all changes, diffs against base commit            |
+| Commit         | Commits staged changes                                   |
+| Report status  | `PATCH /internal/task-runs/:runId` with status and diff  |
+
+**Statuses reported:** `cloning` → `running` → `completed` / `failed`
+
+**File:** `durable-objects/task-run-do.ts`
+
 ## Routes
 
-| Method | Path       | Description             | Auth   |
-| ------ | ---------- | ----------------------- | ------ |
-| GET    | `/health`  | Health check            | No     |
-| GET    | `/ws/v2`   | WebSocket via SessionDO | JWT    |
-| GET    | `/files/*` | List persistent files   | Bearer |
-| GET    | `/logs/*`  | Container logs          | Bearer |
+| Method | Path                | Description              | Auth   |
+| ------ | ------------------- | ------------------------ | ------ |
+| GET    | `/health`           | Health check             | No     |
+| GET    | `/ws/v2`            | WebSocket via SessionDO  | JWT    |
+| POST   | `/task-runs`        | Trigger run via TaskRunDO | Bearer |
+| GET    | `/files/*`          | List persistent files    | Bearer |
+| GET    | `/logs/*`           | Container logs           | Bearer |
+| GET    | `/debug/:sessionId` | Debug diagnostics        | Bearer |
 
 ## Middleware
 
@@ -190,14 +214,17 @@ Set via `wrangler secret put`:
 
 ## Key Files Reference
 
-| File                                  | Purpose                                     |
-| ------------------------------------- | ------------------------------------------- |
-| `src/index.ts`                        | Worker entry, exports SessionDO and Sandbox |
-| `src/durable-objects/session-do.ts`   | WebSocket handling and message relay        |
-| `src/durable-objects/sync-manager.ts` | R2 sync with debouncing and recovery        |
-| `src/services/r2-sync.ts`             | R2 mount/restore/sync commands              |
-| `src/routes/websocket-v2.ts`          | JWT validation and DO routing               |
-| `wrangler.jsonc`                      | Cloudflare Worker configuration             |
+| File                                  | Purpose                                              |
+| ------------------------------------- | ---------------------------------------------------- |
+| `src/index.ts`                        | Worker entry, exports Sandbox, SessionDO, and TaskRunDO |
+| `src/durable-objects/session-do.ts`   | WebSocket handling and message relay                 |
+| `src/durable-objects/task-run-do.ts`  | Autonomous task execution (git + Claude CLI)         |
+| `src/durable-objects/sync-manager.ts` | R2 sync with debouncing and recovery                 |
+| `src/services/r2-sync.ts`             | R2 mount/restore/sync commands                       |
+| `src/services/sandbox-manager.ts`     | Sandbox context and env var management               |
+| `src/routes/websocket-v2.ts`          | JWT validation and DO routing                        |
+| `src/routes/task-run.ts`              | Task run trigger route                               |
+| `wrangler.jsonc`                      | Cloudflare Worker configuration                      |
 
 ## Development
 

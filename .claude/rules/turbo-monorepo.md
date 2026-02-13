@@ -6,7 +6,9 @@
 upgraded-couscous/
 ├── apps/
 │   ├── web/          # Next.js frontend
-│   └── api/          # Hono.js backend
+│   ├── api/          # Hono.js backend
+│   ├── sandbox/      # Cloudflare Workers (DOs, WebSocket, task runs)
+│   └── container/    # Claude Agent SDK server (runs in sandbox)
 └── packages/
     ├── ui/           # Shared React components
     ├── db/           # Drizzle ORM schema & client
