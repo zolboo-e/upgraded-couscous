@@ -5,6 +5,7 @@ export interface ProjectMeta {
   repoUrl?: string;
   defaultBranch?: string;
   githubToken?: string;
+  [key: string]: unknown;
 }
 
 export const projects = pgTable("projects", {
